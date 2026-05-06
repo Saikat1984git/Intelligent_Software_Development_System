@@ -8,6 +8,7 @@ from tools.debug.analyze_webpage_comprehensively import analyze_webpage_comprehe
 from tools.terminal.execute_cli_tool import execute_cli
 from tools.terminal.read_file_tool import read_file
 from tools.terminal.write_file_tool import write_file
+from tools.terminal.edit_file_tool import edit_file
 from tools.debug.get_project_metadata import get_project_metadata
 
 from .subagents.qa_verification_subagent import qa_verification_subagent
@@ -246,22 +247,28 @@ Your PRIMARY objective is to:
 ABSOLUTE PATH RULES (CRITICAL)
 ==================================================
 
-- ALWAYS use FULL ABSOLUTE SYSTEM PATHS.
+- ALWAYS use FULL ABSOLUTE SYSTEM PATHS for EVERY tool.
 - NEVER rely on relative working directories.
 - NEVER assume cwd persistence between tool calls.
 - NEVER pass shorthand or relative paths to tools.
 - ALWAYS resolve the REAL project root path before any operation.
+
+TOOL-SPECIFIC PATH REQUIREMENTS:
+- read_file(file_path): file_path MUST be an absolute path.
+- write_file(file_path, content): file_path MUST be an absolute path.
+- edit_file(file_path, old_string, new_string): file_path MUST be an absolute path.
+- code_fixing_agent(..., project_folder_path): project_folder_path MUST be an absolute path.
 
 The TRUE project root path MUST directly contain:
 - Dockerfile
 - docker-compose.yml
 - application source code
 
-Example valid path:
+Example valid absolute path:
 
 D:\\Development\\new_vibe_code\\generated\\latest_2026-05-06_14-10-43\\retro-rusty-scientific-calculator
 
-Passing incorrect paths is considered a CRITICAL execution failure.
+Passing incorrect or relative paths to ANY tool is considered a CRITICAL execution failure.
 
 ==================================================
 AVAILABLE TOOLS
@@ -288,24 +295,20 @@ AVAILABLE TOOLS
 3. read_file
    - Read files ONLY when absolutely required.
 
-4. write_file
-   - ONLY for infrastructure/configuration fixes.
-   - Allowed:
-       - Dockerfile
-       - docker-compose.yml
-       - nginx.conf
-       - .env
-       - deployment configs
-   - NOT allowed:
-       - application source code
-       - components
-       - services
-       - business logic
+4. edit_file
+   - Use for precise, targeted string replacements in infrastructure/configuration files.
+   - Allowed ONLY for: Dockerfile, docker-compose.yml, nginx.conf, .env, deployment configs.
+   - NOT allowed: application source code.
 
-5. qa_verification_subagent
+5. write_file
+   - Use for completely overwriting infrastructure/configuration files.
+   - Allowed ONLY for: Dockerfile, docker-compose.yml, nginx.conf, .env, deployment configs.
+   - NOT allowed: application source code.
+
+6. qa_verification_subagent
    - Performs UI and functional validation.
 
-6. get_project_metadata
+7. get_project_metadata
    - Retrieve project structure ONLY if truly required.
 
 ==================================================
@@ -362,7 +365,7 @@ When calling code_fixing_agent, you MUST ALWAYS pass:
        - browser errors
        - failing behavior
        - affected containers
-       - file paths
+       - absolute file paths
        - line numbers
        - debugging observations
 
@@ -388,7 +391,7 @@ DO NOT use for:
 - unrelated system commands
 
 --------------------------------------------------
-RULE: write_file
+RULE: edit_file & write_file
 --------------------------------------------------
 
 Use ONLY for:
@@ -401,6 +404,9 @@ DO NOT:
 - modify application source code
 - fix logic manually
 - refactor application code
+
+PREFERENCE:
+Always prefer `edit_file` for targeted modifications. Use `write_file` ONLY if a complete file replacement is necessary. Both MUST use absolute paths.
 
 --------------------------------------------------
 RULE: qa_verification_subagent
@@ -453,7 +459,7 @@ Extract:
 - exact error message
 - stack trace
 - affected container
-- file path
+- absolute file path
 - line number
 - runtime/build phase
 - root symptom
@@ -475,7 +481,7 @@ STEP 4 — APPLY FIX
 --------------------------------------------------
 
 IF Infrastructure Issue:
-- use write_file minimally
+- Use `edit_file` (preferred) or `write_file` using ABSOLUTE paths.
 
 IF Application Issue:
 - IMMEDIATELY call:
@@ -577,12 +583,13 @@ FINAL BEHAVIOR REQUIREMENTS
 - Docker-first execution only.
 - Log-driven debugging only.
 - QA-driven remediation.
-- Absolute-path-safe operations.
+- Absolute-path-safe operations across ALL tools.
 - No manual application code editing.
 - Delegate ALL application fixes to:
     code_fixing_agent
 - Continue iterating until full success.
 """
+
     debug_agent = create_deep_agent(
         model = DEBUG_MODEL, 
         system_prompt= system_prompt,
@@ -592,6 +599,7 @@ FINAL BEHAVIOR REQUIREMENTS
             qa_verification_subagent,
             read_file,
             write_file,
+            edit_file,
             execute_cli,
             get_project_metadata,
             code_fixing_agent
@@ -733,14 +741,17 @@ OUTPUT REQUIREMENT
 
 # --- Example Usage ---
 if __name__ == "__main__":    
-    req = """QA Verification Result (2nd pass):\nis_ok=False\nwebsite_structure=\"The application is a single-page Angular application. The UI    │
-        │ consists of a main container labeled 'Scientific Calculator'. Based on the network requests, it includes external assets like icons (moon.svg)   │
-        │ and Google Fonts (Inter). The visual state indicates a minimal interface, likely containing a display area and a grid of buttons for arithmetic  │
-        │ and scientific functions.\"\nanalysis_details=\"The application successfully loads the base HTML and core Angular bundles (main.js, styles.css). │
-        │ However, the text content is extremely sparse ('Scientific Calculator'), suggesting that the actual calculator interface (buttons, display,      │
-        │ history log) is either failing to render, hidden, or the application is stuck in a loading state. The presence of 'moon.svg' suggests            │
-        │ theme-switching functionality might be present but not visible. The developer agent should investigate why the component tree is not rendering   │
-        │ the calculator UI elements within the main container.\"\nimportant_logs=None"""
+    req = """
+     Create a scientific calculator app in angular with the following features:
+- Basic arithmetic operations (addition, subtraction, multiplication, division)
+- Advanced functions (square root, exponentiation, logarithms)
+- Trigonometric functions (sine, cosine, tangent)
+- User-friendly interface with responsive design
+- Error handling for invalid inputs (e.g., division by zero)
+- History log of calculations
+- Option to switch between light and dark themes
+The UI should modern and intuitive, with a clean layout and clear buttons for each function. The app should be responsive and work well on both desktop and mobile devices. Please ensure that the code is well-structured and commented for maintainability.
+"""
 
     prev_out = """ {'requirements': '\n     Create a scientific calculator app in angular with the following features:\n- Basic arithmetic operations (addition,    │
 │ subtraction, multiplication, division)\n- Advanced functions (square root, exponentiation, logarithms)\n- Trigonometric functions (sine, cosine, │
@@ -766,7 +777,7 @@ if __name__ == "__main__":
 │ codebase provides a maintainable, well-commented, and feature-complete scientific calculator ready for development or deployment.', 'error':     │
 │ None}  """ 
 
-    root_path = "D:/Development/new_vibe_code/generated/latest_2026-05-06_19-53-36"
+    root_path = "generated\latest_2026-05-06_21-19-04"
     try:
         os.chdir(root_path)
     except FileNotFoundError:
