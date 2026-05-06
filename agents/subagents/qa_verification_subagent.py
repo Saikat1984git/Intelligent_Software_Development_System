@@ -6,7 +6,12 @@ from langchain_core.tools import tool
 
 # Assuming your composite tool and models are imported here
 from models.gemini_models import GEMINI_25_PRO, GEMINI_3_FLASH, GEMINI_3_FLASH_LITE
+from models.openai_models import GPT_51_CODEX_MINI, GPT_4O_MINI, GPT_52_CHAT , GPT_5_MINI_TEST
+
 from tools.debug.analyze_webpage_comprehensively import analyze_webpage_comprehensively 
+
+
+QA_SUBAGENT_MODEL = GEMINI_25_PRO # Swap with your preferred model for the QA subagent``
 
 # ------------------------------------------------------------------
 # 1. Define Output & Input Schemas
@@ -66,7 +71,7 @@ async def qa_verification_subagent(requirements: str, url: str) -> VerificationR
         })
 
     # Step 2: Initialize the LLM and bind the structured output schema
-    llm = GEMINI_3_FLASH_LITE # Swap with your preferred model
+    llm = QA_SUBAGENT_MODEL  # Swap with your preferred model
     evaluator_llm = llm.with_structured_output(VerificationResult)
     
     # Step 3: Create the evaluation prompt
@@ -117,9 +122,9 @@ async def qa_verification_subagent(requirements: str, url: str) -> VerificationR
 # ------------------------------------------------------------------
 async def main():
     test_requirements = """
-    a search engine homepage with a search bar centered on the page, a logo above the search bar, and two buttons below it.
+        check of the website is showing a scientific calculator with a display and buttons for digits 0-9, basic operations (+, -, *, /), and a clear button. and theme toogle button and history of calculations. 
     """
-    test_url = "https://www.google.com/" # Replace with your local test URL
+    test_url = "http://localhost:8080/" # Replace with your local test URL
     
     print("Starting QA Subagent tool test...\n")
     

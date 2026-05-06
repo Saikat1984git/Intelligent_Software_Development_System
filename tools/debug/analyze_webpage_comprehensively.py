@@ -1,11 +1,8 @@
 import asyncio
 import json
+import base64
 from langchain_core.tools import tool
-
-# Import your base tools (adjust import paths as needed)
-from .fetch_webpage_content import fetch_webpage_content
-from .capture_website_screenshot import capture_website_screenshot
-from .get_browser_logs import get_browser_logs  # Your new Playwright tool
+from playwright.async_api import async_playwright
 
 @tool
 async def analyze_webpage_comprehensively(url: str) -> str:
@@ -13,87 +10,105 @@ async def analyze_webpage_comprehensively(url: str) -> str:
     # Tool: Analyze Webpage Comprehensively
     
     ## Overview
-    Fetches the clean text content, a visual screenshot, and browser logs 
-    of a webpage concurrently. Use this tool when you need a complete understanding 
-    of a webpage, combining what it says (text), how it looks (visual layout), 
-    and how it is functioning under the hood (JS errors, network requests, logs).
-    
-    ## Input Parameters
-    * `url` (string): The complete, fully qualified HTTP or HTTPS URL of the webpage.
-    
-    ## Expected Output
-    * Returns a JSON formatted string containing the URL, text content, screenshot data, 
-      and a structured dictionary of browser logs.
+    Fetches the accessibility tree snapshot, a visual screenshot (base64), and browser logs 
+    of a webpage in a single browser session. Fully supports Single Page 
+    Applications (React, Angular, Vue) by waiting for network idle states.
     """
+    logs = {
+        "console_messages": [],
+        "page_errors": []
+    }
+
     try:
-        # 1. Run the synchronous functions concurrently in separate threads
-        text_task = asyncio.to_thread(fetch_webpage_content, url)
-        screenshot_task = asyncio.to_thread(capture_website_screenshot, url)
-        logs_task = asyncio.to_thread(get_browser_logs, url)
-        
-        # 2. Await all tasks to finish simultaneously
-        text_result, screenshot_result, logs_result_str = await asyncio.gather(
-            text_task, screenshot_task, logs_task
-        )
-        
-        # 3. Parse the JSON string from get_browser_logs back into a dict
-        # This prevents escaped JSON strings ("{\"console_messages\": []}") in the final output.
-        try:
-            logs_data = json.loads(logs_result_str)
-        except json.JSONDecodeError:
-            # Fallback in case your tool caught an exception and returned a plain error string
-            logs_data = {"error": logs_result_str}
-        
-        # 4. Construct the comprehensive JSON reply
-        comprehensive_result = {
-            "url": url,
-            "status": "success",
-            "data": {
-                "text_content": text_result,
-                "screenshot_data": screenshot_result,
-                "browser_logs": logs_data
+        async with async_playwright() as p:
+            # Launch browser VISIBLY (headless=False)
+            browser = await p.chromium.launch(headless=False)
+            context = await browser.new_context()
+            page = await context.new_page()
+
+            # --- 1. Setup Log Listeners ---
+            page.on(
+                "console", 
+                lambda msg: logs["console_messages"].append({
+                    "type": msg.type, 
+                    "text": msg.text
+                })
+            )
+            page.on(
+                "pageerror", 
+                lambda err: logs["page_errors"].append(err.message)
+            )
+
+            # --- 2. Navigate and Wait for SPA to Render ---
+            # wait_until="networkidle" is what makes this work for React/Angular
+            await page.goto(url, wait_until="networkidle", timeout=30000)
+            
+            # A hard wait to allow you to see it, and for CSS/JS animations to settle
+            await page.wait_for_timeout(2000)
+
+            # --- 3. Extract Data ---
+            # Extract the accessibility tree using aria_snapshot() (Returns a YAML string)
+            accessibility_tree = await page.locator("body").aria_snapshot()
+            
+            screenshot_bytes = await page.screenshot(full_page=True)
+            screenshot_b64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+
+            await browser.close()
+
+            # --- 4. Construct Final Response ---
+            comprehensive_result = {
+                "url": url,
+                "status": "success",
+                "data": {
+                    "accessibility_snapshot": accessibility_tree,
+                    "screenshot_data": screenshot_b64,
+                    "browser_logs": logs
+                }
             }
-        }
-        
-        return json.dumps(comprehensive_result)
-        
+
+            print(f"✅ Successfully analyzed webpage: {url}")
+            return json.dumps(comprehensive_result)
+
     except Exception as e:
-        # Graceful error handling
         error_result = {
             "url": url,
             "status": "error",
             "error_message": str(e)
         }
+        print(f"❌ Failed to analyze webpage: {e}")
         return json.dumps(error_result)
 
 
 async def main():
     print("Starting test for 'analyze_webpage_comprehensively'...\n")
-    test_url = "https://www.google.com/"
     
-    print("Invoking composite tool...")
+    # Testing with a site that relies on JS rendering
+    test_url = "https://react.dev/" 
+    
+    print(f"Invoking tool for URL: {test_url}")
     start_time = asyncio.get_event_loop().time()
     
     # Invoke the composite tool
     json_response = await analyze_webpage_comprehensively.ainvoke({"url": test_url})
     
     end_time = asyncio.get_event_loop().time()
-    
     print(f"\nTool execution finished in {end_time - start_time:.2f} seconds.")
     
     # Parse and verify the output
     parsed_response = json.loads(json_response)
     print("--- Test Results ---")
     
-    # We truncate text and screenshot data so the console output isn't flooded during testing
-    if "text_content" in parsed_response.get("data", {}):
-        parsed_response["data"]["text_content"] = "...[TRUNCATED]..."
+    # Truncate large data so the console output isn't flooded during testing
+    if "accessibility_snapshot" in parsed_response.get("data", {}):
+        snapshot_len = len(str(parsed_response["data"]["accessibility_snapshot"]))
+        parsed_response["data"]["accessibility_snapshot"] = f"...[TRUNCATED SNAPSHOT - {snapshot_len} chars]..."
+        
     if "screenshot_data" in parsed_response.get("data", {}):
-        parsed_response["data"]["screenshot_data"] = "...[TRUNCATED BASE64]..."
+        screenshot_len = len(parsed_response["data"]["screenshot_data"])
+        parsed_response["data"]["screenshot_data"] = f"...[TRUNCATED BASE64 - {screenshot_len} chars]..."
         
     print(json.dumps(parsed_response, indent=2))
     
-    # Assertions
     assert parsed_response["status"] == "success", "Expected status to be 'success'"
     assert "browser_logs" in parsed_response["data"], "Missing browser logs"
     
