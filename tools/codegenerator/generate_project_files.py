@@ -10,11 +10,15 @@ from rich.panel import Panel
 
 # Assuming these imports match your project
 from agents.states.CodebaseState import CodebaseState
-from models.openai_models import GPT_51_CODEX_MINI
+from models.openai_models import GPT_51_CODEX_MINI, GPT_53_CODEX
 from utils.extract_text_from_response import extract_text_from_response
 
 load_dotenv()
 console = Console()
+
+
+
+CODE_GENERATION_MODEL = GPT_53_CODEX
 
 def print_code_panel(file_path: str, content: str):
     """Helper to print code via rich (mock implementation)."""
@@ -28,6 +32,7 @@ def get_dependent_files_contents(dependent_paths: List[str]) -> str:
     """
     if not dependent_paths:
         return "No local dependent files."
+    print(f"INFO: Reading contents of {" ,".join(dependent_paths)} dependent files for prompt context...")
 
     contents = []
     for path in dependent_paths:
@@ -60,7 +65,7 @@ async def _generate_and_save_file(
         # Extract the highly specific generation prompt generated in the previous step
         specific_generation_prompt = file_metadata.get("generation_promt", "Follow best practices for this file type.")
 
-        prompt = f"""You are an expert, principal-level software engineer. Generate production-ready code for a specific file in a project.
+        prompt = prompt = f"""You are an expert, principal-level software engineer. Generate production-ready code for a specific file in a project.
 
             <context>
             PROJECT REQUIREMENTS:
@@ -107,19 +112,22 @@ async def _generate_and_save_file(
               - Is syntactically correct and immediately usable
               - Maintains consistency with the overall project architecture
 
-            4. SPECIAL CASES:
+            4. SPECIAL CASES (CRITICAL):
               - For package.json: Include all necessary dependencies with latest versions
-              - For README.md: Include project overview, setup, and usage instructions
+              - For README.md: Include project overview, setup, and strictly Docker-based usage instructions
               - For run.sh: Include environment setup, dependency installation, and run commands
               - For config files: Use values that match the project requirements
               - For test files: Create realistic test cases
-              - For Docker files: Use multi-stage builds and best practices
+              - For Dockerfile(s): Use multi-stage builds, minimal base images (e.g., alpine), and optimize layer caching.
+              - For docker-compose.yml: STRICTLY restrict the build `context` to the specific service directory (e.g., `.` or `./frontend`). NEVER use parent directories (e.g., `..`) to prevent massive daemon transfers.
+              - For .dockerignore: Explicitly exclude heavy/temporary directories (`node_modules`, `.git`, `dist`, `build`, `.env`, etc.) to guarantee fast build context uploads.
 
             5. IMPORTANT RULES:
               - Reference other files in the structure when appropriate (e.g., imports)
               - Use consistent naming patterns across the project
               - Ensure all paths and imports align with the codebase structure
               - Make the code cohesive with the rest of the project
+              - ALL UI graphics/images MUST be implemented as inline or referenced `.svg` files. Do not use or reference PNG, JPG, or GIF formats.
             </instructions>
 
             <output_format>
@@ -133,34 +141,40 @@ async def _generate_and_save_file(
             Generate the file content now:"""
 
         try:
-            # Using ainvoke for asynchronous generation
-            response = await llm.ainvoke(prompt)
-            content = extract_text_from_response(response).strip()
+                # Using ainvoke for asynchronous generation
+                response = await llm.ainvoke(prompt)
+                content = extract_text_from_response(response).strip()
 
-            # Clean up markdown formatting if the model still outputs it
-            if content.startswith("```"):
-                lines = content.split("\n")
-                if lines[0].startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].strip().startswith("```"):
-                    lines = lines[:-1]
-                content = "\n".join(lines)
+                # Clean up markdown formatting if the model still outputs it
+                if content.startswith("```"):
+                    lines = content.split("\n")
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip().startswith("```"):
+                        lines = lines[:-1]
+                    content = "\n".join(lines)
 
-            print_code_panel(file_path, content)
+                print_code_panel(file_path, content)
 
-            # Create the necessary directories if they don't exist
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                # --- THE FIX ---
+                # Extract the directory path
+                dir_name = os.path.dirname(file_path)
+                
+                # Only attempt to create directories if the file isn't at the root level
+                if dir_name:
+                    os.makedirs(dir_name, exist_ok=True)
+                # ---------------
 
-            # Write the generated code to the file
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(content)
+                # Write the generated code to the file
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(content)
 
-            print(f"SUCCESS: Saved {file_path}")
-            return True
+                print(f"SUCCESS: Saved {file_path}")
+                return True
 
         except Exception as e:
-            print(f"ERROR: Failed to generate {file_path}: {str(e)}")
-            return False
+                print(f"ERROR: Failed to generate {file_path}: {str(e)}")
+                return False
 
 def _build_dependency_levels(files_dict: Dict[str, Any]) -> List[List[str]]:
     """
@@ -217,6 +231,7 @@ async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
 
     # 3. Retrieve the structure directly from the state
     codebase_json = state.get("project_structure")
+    project_name = codebase_json.get("project_name", "generated_project") if codebase_json else "generated_project"
     
     # Fallback to reading from disk if state is somehow missing it
     if not codebase_json:
@@ -246,7 +261,7 @@ async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
     # 5. Concurrency setup
     max_concurrent_calls = 15
     semaphore = asyncio.Semaphore(max_concurrent_calls)
-    llm = GPT_51_CODEX_MINI # Or GEMINI_31_PRO if preferred
+    llm = CODE_GENERATION_MODEL # Or GEMINI_31_PRO if preferred
 
     successful_files = []
 
@@ -265,7 +280,7 @@ async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
 
             tasks.append(
                 _generate_and_save_file(
-                    file_path=path,
+                    file_path= path,  # Prepend project name to the path
                     file_metadata=file_metadata,
                     requirements=requirements,
                     skills_context=skills_context,

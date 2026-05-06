@@ -45,6 +45,7 @@ from langgraph.graph import StateGraph, START, END
 
 # --- Define the Router Function ---
 def should_execute_scripts(state: CodebaseState) -> str:
+    return "end" 
     """
     Conditional router: Checks if skills were loaded.
     If skills_text is not empty, route to script execution.
@@ -77,6 +78,7 @@ def build_codebase_graph():
 
     # 2. Define the base execution flow
     workflow.add_edge(START, "load_skills")
+    # workflow.add_edge(START, "generate_structure")
     workflow.add_edge("load_skills", "generate_structure")
     workflow.add_edge("generate_structure", "generate_files")
     

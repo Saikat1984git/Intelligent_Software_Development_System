@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 
 from pydantic import BaseModel, Field
 from agents.states.CodebaseState import CodebaseState
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from rich.console import Console
 from rich.panel import Panel
@@ -102,14 +102,108 @@ Generate a structured JSON mapping of the complete codebase based on the user's 
 ### SKILLS / CONTEXT
 {skills_context}
 
-### ARCHITECTURAL & CONTENT RULES
-- TECH STACK: If the user specifies a tech stack, strictly follow it. If none is specified, select the best modern, scalable, industry-grade stack.
-- COMPLETENESS: Include all necessary files for a real production project (e.g., package.json, .env.example, .gitignore, README.md, Dockerfile, docker-compose.yml).
-- ASSET RESTRICTIONS: All UI graphics/images MUST be `.svg` files. PNG, JPG, and GIF are STRICTLY FORBIDDEN.
-- DICTIONARY FORMAT: Ensure the output is a flat dictionary where keys are the full file paths (e.g., "frontend/src/App.tsx") and values contain the required metadata.
-- GENERATION PROMPT: Provide a highly detailed `generation_promt` for each file. This prompt will be passed to a coder agent later to actually write the file's contents.
+========================
+CORE ARCHITECTURAL RULES
+========================
+- TECH STACK:
+  - If the user specifies a stack → strictly follow it
+  - If not → choose a modern, scalable, production-grade stack
+
+- DOCKER-FIRST ARCHITECTURE (MANDATORY):
+  - EVERY project MUST include:
+    - Dockerfile (for each service if multi-service)
+    - docker-compose.yml (REQUIRED, even for single-service apps)
+  - The application MUST be fully runnable via Docker ONLY
+  - Define:
+    - Services (frontend, backend, db, etc.)
+    - Networks
+    - Volumes (if needed)
+    - Environment variables
+  - Ensure inter-service communication works via Docker networking
+  - No assumptions of local runtime outside Docker
+
+- PRODUCTION COMPLETENESS:
+  Include ALL required files for a real-world deployable project:
+  - package.json / requirements.txt / pom.xml (depending on stack)
+  - .env.example (REQUIRED)
+  - .gitignore
+  - .dockerignore (REQUIRED to prevent massive build context transfers)
+  - README.md (must include Docker run instructions)
+  - Dockerfile(s)
+  - docker-compose.yml
+  - Config files (tsconfig, eslint, nginx, etc. as needed)
+
+- SCALABILITY & STRUCTURE:
+  - Follow clean architecture principles
+  - Separate concerns (API, services, config, components, etc.)
+  - Design for extensibility and maintainability
+
+- ASSET RESTRICTIONS:
+  - ALL UI graphics/images MUST be `.svg`
+  - PNG, JPG, GIF are STRICTLY FORBIDDEN
+
+========================
+OUTPUT FORMAT RULES
+========================
+- Return a FLAT JSON dictionary
+- Keys = FULL file paths (e.g., "frontend/src/App.tsx")
+- Values = metadata object for each file
+
+Each file MUST include:
+- "description": Purpose of the file
+- "generation_prompt": A HIGHLY DETAILED prompt for a coder agent
+
+========================
+GENERATION PROMPT REQUIREMENTS
+========================
+Each `generation_prompt` MUST:
+- Be implementation-ready (no ambiguity)
+- Include:
+  - Exact responsibilities of the file
+  - Key logic/components/classes
+  - Expected inputs/outputs
+  - Dependencies/imports
+  - Integration with other files/services
+- Be detailed enough that another agent can generate the file WITHOUT guessing
+
+========================
+DOCKER-SPECIFIC REQUIREMENTS
+========================
+- .dockerignore MUST:
+  - Be generated for the root of the build context.
+  - Explicitly exclude heavy, non-essential folders (e.g., `node_modules`, `.git`, `dist`, `build`, `.env`) to optimize daemon transfer sizes.
+
+- Dockerfile(s) MUST:
+  - Use optimized base images
+  - Follow best practices (layer caching, minimal size, security)
+  - Correct working directory and build steps
+  - Proper CMD/ENTRYPOINT
+
+- docker-compose.yml MUST:
+  - Define all services clearly
+  - Include:
+    - build context (MUST be strictly scoped, e.g., `context: .` or `context: ./service_name`. NEVER use a parent directory like `..` to prevent massive context uploads)
+    - ports
+    - environment variables
+    - volumes (if needed)
+    - depends_on
+  - Ensure full system runs with:
+    docker compose up --build
+
+- README.md MUST:
+  - Include exact Docker commands to run the system
+  - No local (non-Docker) setup instructions
+
+========================
+FINAL CONSTRAINTS
+========================
+- Do NOT omit Docker under any condition
+- Do NOT assume local execution environments
+- Do NOT generate incomplete structures
+- Do NOT include unused or placeholder files
+- Ensure the project is runnable end-to-end via Docker
+
 """
-    
     user_prompt = f"\n\n### USER REQUIREMENTS\n{requirements}"
     
     print("INFO: Invoking LLM to generate codebase structure...")
@@ -117,10 +211,11 @@ Generate a structured JSON mapping of the complete codebase based on the user's 
     
     try:
         messages = [
+            SystemMessage(content=system_prompt),
             AIMessage(content=f"LLM Output History:\n{chr(10).join(history)}"),
-            HumanMessage(content=system_prompt + user_prompt),
+            HumanMessage(content=user_prompt),
         ]
-        
+                
         # The LLM will natively return the Pydantic CodebaseMap object
         response: CodebaseMap = llm.invoke(messages)
         

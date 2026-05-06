@@ -46,7 +46,17 @@ def get_timestamped_dir():
 
 async def main():
     user_requirements = (
-      """Create  a retro calculator app using  react. The app should have a retro rusty vintage design and include all features"""
+      """
+     Create a scientific calculator app in angular with the following features:
+- Basic arithmetic operations (addition, subtraction, multiplication, division)
+- Advanced functions (square root, exponentiation, logarithms)
+- Trigonometric functions (sine, cosine, tangent)
+- User-friendly interface with responsive design
+- Error handling for invalid inputs (e.g., division by zero)
+- History log of calculations
+- Option to switch between light and dark themes
+The UI should modern and intuitive, with a clean layout and clear buttons for each function. The app should be responsive and work well on both desktop and mobile devices. Please ensure that the code is well-structured and commented for maintainability.
+"""
     )
     print("🚀 Starting the AI Software Architect...")
     

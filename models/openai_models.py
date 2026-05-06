@@ -48,3 +48,7 @@ O4_MINI = ChatOpenAI(
     model="o4-mini",
     **COMMON_CONFIG
 )
+GPT_53_CODEX = ChatOpenAI(
+    model="gpt-5.3-codex",
+    **COMMON_CONFIG
+)

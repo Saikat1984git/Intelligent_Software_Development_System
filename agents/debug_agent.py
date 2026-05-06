@@ -3,6 +3,7 @@ import os
 import json
 from deepagents import create_deep_agent
 
+from agents.code_fixing_agent import code_fixing_agent
 from tools.debug.analyze_webpage_comprehensively import analyze_webpage_comprehensively
 from tools.terminal.execute_cli_tool import execute_cli
 from tools.terminal.read_file_tool import read_file
@@ -13,7 +14,8 @@ from .subagents.qa_verification_subagent import qa_verification_subagent
 
 from langchain.agents.middleware.summarization import SummarizationMiddleware
 # Models
-from models.gemini_models import GEMINI_3_FLASH
+from models.gemini_models import GEMINI_3_FLASH, GEMINI_31_PRO
+from models.openai_models import GPT_4O_MINI, GPT_5_MINI_TEST, GPT_52_CHAT, GPT_51_CODEX_MINI
 
 from deepagents.backends import LocalShellBackend
 
@@ -24,17 +26,166 @@ from rich.console import Console
 from rich.syntax import Syntax
 from rich.panel import Panel
 
+
+from typing import Any, Iterable
+
+
 from models.gemini_models import GEMINI_3_FLASH_LITE
 
 # Initialize Console globally for the script
 console = Console()
+
+DEBUG_MODEL = GPT_51_CODEX_MINI
+SUMMARIZATION_MODEL = GPT_4O_MINI
+
+
+def get_attr_or_key(obj: Any, name: str, default=None):
+    """Safely read either an attribute or a dict key."""
+    if obj is None:
+        return default
+
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+
+    return getattr(obj, name, default)
+
+
+def usage_to_dict(usage: Any) -> dict:
+    """Normalize usage metadata from dict/object/None."""
+    if not usage:
+        return {}
+
+    if isinstance(usage, dict):
+        return usage
+
+    out = {}
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        value = getattr(usage, key, None)
+        if value is not None:
+            out[key] = value
+    return out
+
+
+def stringify_any(value: Any) -> str:
+    """
+    Convert almost anything into a safe display string.
+    Handles:
+    - str
+    - dict
+    - list / tuple / set
+    - LangChain message objects
+    - OpenAI structured content arrays
+    - arbitrary Python objects
+    """
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value
+
+    # OpenAI / LangChain structured content list
+    if isinstance(value, (list, tuple, set)):
+        parts = []
+        for item in value:
+            if isinstance(item, dict):
+                item_type = item.get("type")
+
+                # Prefer plain text chunks
+                if item_type == "text" and "text" in item:
+                    parts.append(str(item.get("text", "")))
+                    continue
+
+                # Sometimes structured messages may contain nested content
+                if "content" in item:
+                    parts.append(stringify_any(item["content"]))
+                    continue
+
+                parts.append(json.dumps(item, indent=2, ensure_ascii=False, default=str))
+            else:
+                parts.append(stringify_any(item))
+
+        return "\n".join(p for p in parts if p.strip())
+
+    # Dict
+    if isinstance(value, dict):
+        if "text" in value and isinstance(value["text"], str):
+            return value["text"]
+
+        if "content" in value:
+            return stringify_any(value["content"])
+
+        return json.dumps(value, indent=2, ensure_ascii=False, default=str)
+
+    # LangChain message objects often expose `.content`
+    content = getattr(value, "content", None)
+    if content is not None:
+        return stringify_any(content)
+
+    # Fallback for any other object
+    return str(value)
+
+
+def extract_messages_list(messages_update: Any) -> list:
+    """
+    Normalize different message container shapes into a list.
+    Works with:
+    - plain list
+    - objects with `.value`
+    - single message object
+    """
+    if messages_update is None:
+        return []
+
+    if hasattr(messages_update, "value"):
+        messages_update = messages_update.value
+
+    if isinstance(messages_update, list):
+        return messages_update
+
+    if isinstance(messages_update, tuple):
+        return list(messages_update)
+
+    # Sometimes a single message gets returned
+    return [messages_update]
+
+
+def extract_tool_calls(message: Any) -> list:
+    """
+    Normalize tool calls from dict/object/message.
+    Returns a list of dict-like tool calls.
+    """
+    tool_calls = get_attr_or_key(message, "tool_calls", None)
+    if not tool_calls:
+        return []
+
+    if isinstance(tool_calls, list):
+        return tool_calls
+
+    return [tool_calls]
+
+
+def safe_latest_message_content(message: Any) -> str:
+    """
+    Extract a safe printable content string from any message shape.
+    """
+    content = get_attr_or_key(message, "content", None)
+    if content is not None:
+        return stringify_any(content)
+
+    # Some providers place text-like output in other fields
+    for field in ("text", "output_text", "message", "body"):
+        val = get_attr_or_key(message, field, None)
+        if val is not None:
+            return stringify_any(val)
+
+    return stringify_any(message)
 
 
 
 
 # 2. Configure the Summarization Middleware
 summarization = SummarizationMiddleware(
-    model=GEMINI_3_FLASH_LITE,
+    model=SUMMARIZATION_MODEL,
     
     # TRIGGER: Run when the conversation hits 15 back-and-forth messages
     trigger=[("messages",30)],
@@ -66,36 +217,374 @@ async def run_debugging_agent(
             project_metadata_str = f"Error reading metadata: {e}"
 
     # --- 2. Define the SYSTEM PROMPT (The Brain & Rules) ---
-    system_prompt = f"""You are an expert full-stack execution and debugging agent. Your primary objective is to ALWAYS start by executing the application first, capturing any error logs, and methodically debugging those errors step-by-step.
+  
+    system_prompt = f"""
+You are an expert autonomous full-stack execution, debugging, and QA remediation agent.
 
-CRITICAL INSTRUCTION: DO NOT create tasks, plans, or todos to "explore project structure" or "verify files". The complete project structure and file details are already fully provided in the `<project_metadata>` block. You must trust this metadata and skip any manual directory exploration. 
+You are operating on this ABSOLUTE ROOT PATH:
 
-EXECUTION LOOP (MUST FOLLOW EXACTLY):
-1. **Execute (Absolute First Step):** Use `execute_cli` to run startup commands (e.g., Docker build/up). Do not explore directories or read files before doing this.
-2. **Analyze:** Review captured logs/stack traces from the execution step. Identify the exact error, file, and line.
-3. **Read:** If (and only if) an error occurs, use `read_file` on the specific files implicated by the logs. Do not guess contents.
-4. **Rewrite:** Use `write_file` to implement a targeted fix for the identified error.
-5. **Verify:** Restart via `execute_cli`. Check logs.
-6. **Inspect UI:** If the backend is running perfectly, use `qa_verification_subagent` to compare the live webpage against the original requirements. This subagent will also capture any visual bugs or JS errors that don't cause backend crashes.
-7. **Iterate/Terminate:** If perfect, terminate. If errors persist, loop back to Step 2.
-8. **When to STOP: Only stop when the application is running without any errors AND the QA subagent return isok = True, confirming the app meets the requirements.
+{root_path}
 
+ALL file operations, Docker execution, debugging, and tool calls MUST use this root path as the source of truth.
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Your PRIMARY objective is to:
+
+1. Build and run the application using Docker.
+2. Capture and analyze runtime/build errors.
+3. Iteratively debug failures.
+4. Resolve QA and UI issues.
+5. Continue until:
+   - the application runs successfully,
+   - Docker logs are clean,
+   - and QA validation passes completely.
+
+==================================================
+ABSOLUTE PATH RULES (CRITICAL)
+==================================================
+
+- ALWAYS use FULL ABSOLUTE SYSTEM PATHS.
+- NEVER rely on relative working directories.
+- NEVER assume cwd persistence between tool calls.
+- NEVER pass shorthand or relative paths to tools.
+- ALWAYS resolve the REAL project root path before any operation.
+
+The TRUE project root path MUST directly contain:
+- Dockerfile
+- docker-compose.yml
+- application source code
+
+Example valid path:
+
+D:\\Development\\new_vibe_code\\generated\\latest_2026-05-06_14-10-43\\retro-rusty-scientific-calculator
+
+Passing incorrect paths is considered a CRITICAL execution failure.
+
+==================================================
+AVAILABLE TOOLS
+==================================================
+
+1. execute_cli
+   - Run Docker commands ONLY.
+   - Capture stdout/stderr logs.
+
+2. code_fixing_agent
+   - MANDATORY tool for ALL application code fixes.
+   - Responsible for:
+       - runtime crashes
+       - build failures
+       - Angular/React/Vue errors
+       - backend failures
+       - logic bugs
+       - API issues
+       - dependency injection issues
+       - QA failures
+       - rendering problems
+       - TypeScript/Python/Java/etc errors
+
+3. read_file
+   - Read files ONLY when absolutely required.
+
+4. write_file
+   - ONLY for infrastructure/configuration fixes.
+   - Allowed:
+       - Dockerfile
+       - docker-compose.yml
+       - nginx.conf
+       - .env
+       - deployment configs
+   - NOT allowed:
+       - application source code
+       - components
+       - services
+       - business logic
+
+5. qa_verification_subagent
+   - Performs UI and functional validation.
+
+6. get_project_metadata
+   - Retrieve project structure ONLY if truly required.
+
+==================================================
+CORE PRINCIPLES
+==================================================
+
+- ALWAYS start with Docker execution.
+- ALL execution MUST happen inside Docker.
+- NEVER run the app outside Docker.
+- NEVER manually fix application code yourself.
+- NEVER invent file contents.
+- NEVER delete files.
+- TRUST <project_metadata> as the primary source of truth.
+- Use log-driven debugging only.
+- Minimize unnecessary tool usage.
+- Always preserve project architecture.
+
+==================================================
+STRICT TOOL USAGE RULES
+==================================================
+
+--------------------------------------------------
+RULE: code_fixing_agent (MANDATORY)
+--------------------------------------------------
+
+For ANY application-level issue, you MUST use:
+
+code_fixing_agent
+
+This includes:
+- runtime crashes
+- blank screens
+- Angular bootstrap errors
+- React rendering failures
+- DI/provider issues
+- backend exceptions
+- API failures
+- UI bugs
+- QA failures
+- broken functionality
+- compilation failures
+- missing imports/providers/modules
+- logic bugs
+
+You MUST NEVER manually rewrite application code yourself.
+
+When calling code_fixing_agent, you MUST ALWAYS pass:
+
+1. issue
+   - COMPLETE error information including:
+       - Docker logs
+       - stack traces
+       - QA feedback
+       - browser errors
+       - failing behavior
+       - affected containers
+       - file paths
+       - line numbers
+       - debugging observations
+
+2. project_folder_path
+   - MUST ALWAYS be the FULL ABSOLUTE SYSTEM PATH
+     to the ACTUAL project root.
+   - NEVER pass relative paths.
+   - NEVER pass parent generated folders unless they
+     are the actual application root.
+
+--------------------------------------------------
+RULE: execute_cli
+--------------------------------------------------
+
+Use ONLY for:
+- docker compose up --build
+- docker build
+- docker run
+- docker compose logs
+
+DO NOT use for:
+- random shell exploration
+- unrelated system commands
+
+--------------------------------------------------
+RULE: write_file
+--------------------------------------------------
+
+Use ONLY for:
+- Docker configs
+- nginx configs
+- env files
+- infrastructure adjustments
+
+DO NOT:
+- modify application source code
+- fix logic manually
+- refactor application code
+
+--------------------------------------------------
+RULE: qa_verification_subagent
+--------------------------------------------------
+
+ONLY execute AFTER:
+- containers run successfully
+- no active Docker crashes exist
+- logs appear stable
+
+If QA reports ANY failure:
+- DO NOT manually fix the issue
+- IMMEDIATELY pass the EXACT QA output to:
+    code_fixing_agent
+
+--------------------------------------------------
+RULE: read_file & get_project_metadata
+--------------------------------------------------
+
+Use minimally.
+
+Prefer:
+- logs
+- metadata context
+- delegated fixing through code_fixing_agent
+
+==================================================
+MANDATORY EXECUTION LOOP
+==================================================
+
+STEP 1 — EXECUTE APPLICATION
+--------------------------------------------------
+
+FIRST ACTION MUST ALWAYS BE:
+
+docker compose up --build
+
+Fallback:
+- docker build
+- docker run
+
+Capture COMPLETE logs.
+
+==================================================
+
+STEP 2 — ANALYZE FAILURES
+--------------------------------------------------
+
+Extract:
+- exact error message
+- stack trace
+- affected container
+- file path
+- line number
+- runtime/build phase
+- root symptom
+
+==================================================
+
+STEP 3 — CLASSIFY FAILURE
+--------------------------------------------------
+
+Determine whether the issue is:
+
+A. Infrastructure / Docker / Config
+OR
+B. Application Logic / Runtime
+
+==================================================
+
+STEP 4 — APPLY FIX
+--------------------------------------------------
+
+IF Infrastructure Issue:
+- use write_file minimally
+
+IF Application Issue:
+- IMMEDIATELY call:
+    code_fixing_agent
+
+DO NOT manually write application code.
+
+==================================================
+
+STEP 5 — REBUILD
+--------------------------------------------------
+
+Re-run Docker.
+
+Verify:
+- clean startup
+- no container crashes
+- healthy logs
+
+==================================================
+
+STEP 6 — QA VALIDATION
+--------------------------------------------------
+
+Run:
+qa_verification_subagent
+
+Validate:
+- UI rendering
+- functionality
+- interactions
+- expected requirements
+
+==================================================
+
+STEP 7 — HANDLE QA FAILURES
+--------------------------------------------------
+
+If QA reports ANY issue:
+- DO NOT fix manually
+- IMMEDIATELY pass EXACT QA feedback into:
+    code_fixing_agent
+
+Then:
+- rebuild
+- re-verify
+
+==================================================
+
+STEP 8 — ITERATE
+--------------------------------------------------
+
+Continue loop UNTIL:
+- Docker fully stable
+- zero runtime failures
+- QA returns isok = True
+
+==================================================
+STOP CONDITION
+==================================================
+
+ONLY STOP WHEN:
+- Application runs successfully inside Docker
+- No runtime/build errors remain
+- QA validation passes completely
+- All containers remain stable
+
+==================================================
+ANTI-LOOP SAFEGUARDS
+==================================================
+
+- Track previously attempted fixes.
+- NEVER repeat identical failed fixes.
+- If stuck:
+    - change debugging strategy
+    - inspect logs deeper
+    - verify absolute paths
+    - verify metadata consistency
+
+If code_fixing_agent fails to locate files:
+- IMMEDIATELY verify:
+    - absolute project path
+    - actual project root
+    - Dockerfile location
+    - metadata path
+
+==================================================
 ENVIRONMENT CONTEXT
--------------------
+==================================================
+
 <project_metadata>
 {project_metadata_str}
 </project_metadata>
 
-STRICT CONSTRAINTS & GUARDRAILS:
-- DO NOT waste steps exploring the project structure; rely strictly on `<project_metadata>`. Start by executing.
-- Never guess file contents or rewrite code without reading the file first.
-- Prevent infinite loops by keeping track of previously attempted fixes.
-- CRITICAL DOCKER RULE: If you attempt to use Docker and receive an error indicating the Docker daemon is down (e.g., "failed to connect to the docker API"), YOU MUST IMMEDIATELY HALT. Do not attempt local workarounds (like checking java/javac). Stop and alert the user.
-"""
+==================================================
+FINAL BEHAVIOR REQUIREMENTS
+==================================================
 
-    # --- 3. Initialize the Agent ---
+- Docker-first execution only.
+- Log-driven debugging only.
+- QA-driven remediation.
+- Absolute-path-safe operations.
+- No manual application code editing.
+- Delegate ALL application fixes to:
+    code_fixing_agent
+- Continue iterating until full success.
+"""
     debug_agent = create_deep_agent(
-        model = GEMINI_3_FLASH, 
+        model = DEBUG_MODEL, 
         system_prompt= system_prompt,
         backend=file_system_backend,
         # middleware=[summarization],
@@ -104,7 +593,8 @@ STRICT CONSTRAINTS & GUARDRAILS:
             read_file,
             write_file,
             execute_cli,
-            get_project_metadata
+            get_project_metadata,
+            code_fixing_agent
         ]
     )
 
@@ -169,84 +659,114 @@ OUTPUT REQUIREMENT
 
     with Live(generate_status_panel(), console=console, refresh_per_second=4, transient=False) as live:
         async for chunk in debug_agent.astream(inputs, stream_mode="updates"):
+            if not isinstance(chunk, dict):
+                continue
+
             for node_name, state in chunk.items():
-                
-                # 1. Guard Clauses: Skip invalid states
-                if not state or not isinstance(state, dict) or not state.get("messages"):
+                if not state or not isinstance(state, dict):
                     continue
-                
-                messages_update = state["messages"]
-                messages_list = messages_update.value if hasattr(messages_update, "value") else messages_update
-                
-                if not messages_list or not isinstance(messages_list, list):
+
+                messages_update = state.get("messages")
+                messages_list = extract_messages_list(messages_update)
+
+                if not messages_list:
                     continue
-                
+
                 latest_message = messages_list[-1]
-                
-                # 2. Dual Token Tracking (Memory vs Accumulation)
-                if hasattr(latest_message, 'usage_metadata') and latest_message.usage_metadata:
-                    usage = latest_message.usage_metadata
-                    
-                    # Active Context (This will DROP when the summarizer kicks in)
-                    current_context_tokens = usage.get('input_tokens', 0) 
-                    
-                    # Running Session Totals (This will always go UP)
-                    total_input_tokens += current_context_tokens
-                    total_output_tokens += usage.get('output_tokens', 0)
-                
-                # Update the UI with both metrics
-                live.update(generate_status_panel(
-                    node=node_name, 
-                    current_context=current_context_tokens, 
-                    total_in=total_input_tokens, 
-                    total_out=total_output_tokens
-                ))
 
-                # 3. Print Tool Calls
-                if hasattr(latest_message, 'tool_calls') and latest_message.tool_calls:
-                    for tool in latest_message.tool_calls:
-                        try:
-                            args_str = json.dumps(tool['args'], indent=2)
-                        except TypeError:
-                            args_str = str(tool['args'])
-                        
+                # Usage tracking
+                usage = usage_to_dict(get_attr_or_key(latest_message, "usage_metadata", None))
+                if usage:
+                    current_context_tokens = int(usage.get("input_tokens", 0) or 0)
+                    total_input_tokens += int(usage.get("input_tokens", 0) or 0)
+                    total_output_tokens += int(usage.get("output_tokens", 0) or 0)
+
+                live.update(
+                    generate_status_panel(
+                        node=str(node_name),
+                        current_context=current_context_tokens,
+                        total_in=total_input_tokens,
+                        total_out=total_output_tokens,
+                    )
+                )
+
+                # Tool calls
+                tool_calls = extract_tool_calls(latest_message)
+                if tool_calls:
+                    for tool in tool_calls:
+                        tool_name = get_attr_or_key(tool, "name", "unknown_tool")
+                        tool_args = get_attr_or_key(tool, "args", {})
+
+                        args_str = stringify_any(tool_args)
                         syntax = Syntax(args_str, "json", theme="monokai", line_numbers=False, word_wrap=True)
-                        tool_panel = Panel(syntax, title=f"🔧 [bold yellow]Tool Call:[/bold yellow] {tool['name']}", border_style="yellow")
+                        tool_panel = Panel(
+                            syntax,
+                            title=f"🔧 Tool Call: {tool_name}",
+                            border_style="yellow",
+                        )
                         console.print(tool_panel)
-                        
-                # 4. Print Output Text
-                elif hasattr(latest_message, 'content') and latest_message.content:
-                    content_panel = Panel(latest_message.content, title=f"💬 [bold magenta]Agent Output ({node_name})[/bold magenta]", border_style="magenta")
-                    console.print(content_panel)
-                    final_content = latest_message.content
 
-    # --- 8. Final Summary ---
+                # Output content
+                content_text = safe_latest_message_content(latest_message)
+                if content_text.strip():
+                    content_panel = Panel(
+                        content_text,
+                        title=f"💬 Agent Output ({node_name})",
+                        border_style="magenta",
+                    )
+                    console.print(content_panel)
+                    final_content = content_text
+
     summary_table = Table(title="Agent Session Summary", show_header=True, header_style="bold blue")
     summary_table.add_column("Metric", style="cyan")
     summary_table.add_column("Value", justify="right", style="green")
-    
-    # 1. The final size of the memory after all summarizations
+
     summary_table.add_row("Final Context Size (Memory)", f"[bold magenta]{current_context_tokens:,}[/bold magenta]")
-    
-    # 2. The accumulated metrics
     summary_table.add_row("Total Session Input Tokens", f"{total_input_tokens:,}")
     summary_table.add_row("Total Session Output Tokens", f"{total_output_tokens:,}")
-    
-    # 3. The grand total
     summary_table.add_row("Grand Total", f"[bold yellow]{total_input_tokens + total_output_tokens:,}[/bold yellow]")
-    
+
     console.print()
     console.print(summary_table)
-    
+
     return final_content
 
 # --- Example Usage ---
 if __name__ == "__main__":    
-    req = """Create  a sici-fi calculator app using  react and nodejs. The app should have a futuristic design and include all features"""
+    req = """QA Verification Result (2nd pass):\nis_ok=False\nwebsite_structure=\"The application is a single-page Angular application. The UI    │
+        │ consists of a main container labeled 'Scientific Calculator'. Based on the network requests, it includes external assets like icons (moon.svg)   │
+        │ and Google Fonts (Inter). The visual state indicates a minimal interface, likely containing a display area and a grid of buttons for arithmetic  │
+        │ and scientific functions.\"\nanalysis_details=\"The application successfully loads the base HTML and core Angular bundles (main.js, styles.css). │
+        │ However, the text content is extremely sparse ('Scientific Calculator'), suggesting that the actual calculator interface (buttons, display,      │
+        │ history log) is either failing to render, hidden, or the application is stuck in a loading state. The presence of 'moon.svg' suggests            │
+        │ theme-switching functionality might be present but not visible. The developer agent should investigate why the component tree is not rendering   │
+        │ the calculator UI elements within the main container.\"\nimportant_logs=None"""
 
-    prev_out = """[Application created]""" 
+    prev_out = """ {'requirements': '\n     Create a scientific calculator app in angular with the following features:\n- Basic arithmetic operations (addition,    │
+│ subtraction, multiplication, division)\n- Advanced functions (square root, exponentiation, logarithms)\n- Trigonometric functions (sine, cosine, │
+│ tangent)\n- User-friendly interface with responsive design\n- Error handling for invalid inputs (e.g., division by zero)\n- History log of       │
+│ calculations\n- Option to switch between light and dark themes\nThe UI should modern and intuitive, with a clean layout and clear buttons for    │
+│ each function. The app should be responsive and work well on both desktop and mobile devices. Please ensure that the code is well-structured and │
+│ commented for maintainability.\n', 'skills': None, 'skills_text': None, 'status': 'Succeded', 'execution_log': None, 'metadata_file': None,      │
+│ 'file_paths': None, 'project_structure': None, 'agent_summary': 'Summary of Codebase Generation:\n### **Project Summary: Scientific Calculator   │
+│ Angular Application**\n\nThe codebase generation for the Scientific Calculator app has been successfully completed. The system followed a        │
+│ structured multi-level execution plan to deliver a fully functional, containerized Angular application.\n\n#### **Accomplishments & Features     │
+│ Implemented:**\n*   **Core Logic:** Developed `calculator.service.ts` and `calculator.component.ts` to handle basic arithmetic, advanced         │
+│ functions (square root, exponentiation, logs), and trigonometric operations.\n*   **User Interface:** Created a modern, responsive UI using SCSS │
+│ and HTML templates, featuring a clean layout optimized for both desktop and mobile.\n*   **State Management:** \n    *   Implemented a **History │
+│ Log** via `history.service.ts` to track previous calculations.\n    *   Developed a **Theme Engine** (`theme.service.ts`) allowing users to      │
+│ toggle between light and dark modes, supported by dedicated SVG icons and a `theme-toggle` component.\n*   **Error Handling:** Integrated logic  │
+│ to manage invalid inputs, such as division by zero and mathematical errors.\n*   **DevOps & Deployment:** \n    *   Configured **Docker**        │
+│ support with a `Dockerfile`, `docker-compose.yml`, and `.dockerignore`.\n    *   Included an **Nginx** configuration for production-ready        │
+│ hosting.\n    *   Standardized the environment with `package.json`, `tsconfig.json`, and `angular.json`.\n\n#### **Execution Highlights:**\n*    │
+│ **File Generation:** Successfully generated **28 out of 28** identified files across 5 execution levels.\n*   **Skill Integration:** The system  │
+│ successfully leveraged the `docker-essentials` skill to ensure robust containerization.\n*   **Structure:** The project follows a modular        │
+│ Angular architecture, separating concerns into components (Calculator, History, Theme-Toggle) and services (Calculator, History, Theme).\n*      │
+│ **Errors:** No errors were encountered during the generation process; all files were created according to the project metadata.\n\nThe resulting │
+│ codebase provides a maintainable, well-commented, and feature-complete scientific calculator ready for development or deployment.', 'error':     │
+│ None}  """ 
 
-    root_path = "D:/Development/new_vibe_code/generated/latest_2026-03-23_23-06-31"
+    root_path = "D:/Development/new_vibe_code/generated/latest_2026-05-06_19-53-36"
     try:
         os.chdir(root_path)
     except FileNotFoundError:
