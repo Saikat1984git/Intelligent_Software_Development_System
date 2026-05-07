@@ -124,6 +124,18 @@ def build_codebase_graph():
 
 # --- Main Execution ---
 async def run_codegeneration_agent(user_requirements):
+    """
+    Main function to run the code generation agent workflow.
+    This function sets up an isolated workspace, runs the code generation workflow,
+    and then prompts the user to decide whether to proceed with debugging.
+        The workflow includes:
+        1. Loading skills
+        2. Generating codebase structure
+        3. Conditionally executing skill scripts if skills were loaded
+        4. Generating project files
+        5. Summarizing the generated codebase
+
+    """
     
     # # 2. --- DEFINE REQUIREMENTS ---
     # user_requirements = (
