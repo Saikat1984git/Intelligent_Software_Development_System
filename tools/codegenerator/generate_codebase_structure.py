@@ -114,6 +114,7 @@ CORE ARCHITECTURAL RULES
     - Dockerfile (for each service if multi-service)
     - docker-compose.yml (REQUIRED, even for single-service apps)
   - The application MUST be fully runnable via Docker ONLY
+  - Database initialization MUST use an `init.db` file (e.g., an `init.sql` or setup script) that is mounted and executed by `docker-compose.yml` to automatically load schema and seed data on startup.
   - Define:
     - Services (frontend, backend, db, etc.)
     - Networks
@@ -129,8 +130,10 @@ CORE ARCHITECTURAL RULES
   - .gitignore
   - .dockerignore (REQUIRED to prevent massive build context transfers)
   - README.md (must include Docker run instructions)
+  - TESTDOC.md (REQUIRED for QA agent testing instructions)
   - Dockerfile(s)
   - docker-compose.yml
+  - init.db (REQUIRED if a database is used, for loading initial data)
   - Config files (tsconfig, eslint, nginx, etc. as needed)
 
 - SCALABILITY & STRUCTURE:
@@ -167,7 +170,7 @@ Each `generation_prompt` MUST:
 - Be detailed enough that another agent can generate the file WITHOUT guessing
 
 ========================
-DOCKER-SPECIFIC REQUIREMENTS
+DOCKER & DATABASE REQUIREMENTS
 ========================
 - .dockerignore MUST:
   - Be generated for the root of the build context.
@@ -187,12 +190,24 @@ DOCKER-SPECIFIC REQUIREMENTS
     - environment variables
     - volumes (if needed)
     - depends_on
+  - Database Services MUST map the `init.db` file to the container's initialization directory (e.g., `/docker-entrypoint-initdb.d/`) to guarantee automated data loading.
   - Ensure full system runs with:
     docker compose up --build
 
 - README.md MUST:
   - Include exact Docker commands to run the system
   - No local (non-Docker) setup instructions
+
+========================
+QA TESTING REQUIREMENTS (TESTDOC.md)
+========================
+- You MUST generate a `TESTDOC.md` file designed specifically for a QA_AGENT.
+- This document must contain comprehensive, step-by-step instructions on how to test the application UI and APIs.
+- It MUST explicitly define:
+  - Exact dummy data to input into forms or API requests.
+  - Specific UI interactions (e.g., "Click the 'Submit' button", "Navigate to '/dashboard'", "Toggle the theme switch").
+  - Expected behaviors, visual changes, and assertions the QA_AGENT should verify after each action.
+  - Edge cases and error states to trigger and validate.
 
 ========================
 FINAL CONSTRAINTS

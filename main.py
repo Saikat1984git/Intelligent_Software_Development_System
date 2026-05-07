@@ -47,15 +47,247 @@ def get_timestamped_dir():
 async def main():
     user_requirements = (
       """
-     Create a scientific calculator app in angular with the following features:
-- Basic arithmetic operations (addition, subtraction, multiplication, division)
-- Advanced functions (square root, exponentiation, logarithms)
-- Trigonometric functions (sine, cosine, tangent)
-- User-friendly interface with responsive design
-- Error handling for invalid inputs (e.g., division by zero)
-- History log of calculations
-- Option to switch between light and dark themes
-The UI should modern and intuitive, with a clean layout and clear buttons for each function. The app should be responsive and work well on both desktop and mobile devices. Please ensure that the code is well-structured and commented for maintainability.
+ Create a full-stack enterprise-style vehicle management web application inspired by classic dealership/internal ERP desktop-style systems.
+
+## Tech Stack
+### Frontend
+- Angular (latest stable version)
+- Angular Material + custom CSS for classic enterprise UI styling
+- Reactive Forms
+- Routing enabled
+- Modular architecture
+
+### Backend
+- Java Spring Boot
+- REST API architecture
+- Spring Data JPA
+- MySQL database
+- DTO + Service + Repository layered architecture
+
+---
+
+# Application Goal
+
+Build a vehicle enquiry and registration management application.
+
+The application should:
+1. Allow users to enter vehicle-related information in a large enterprise-style form
+2. Save the data into MySQL
+3. Submit the form
+4. Navigate to another screen/page
+5. Display submitted records in a searchable table/grid
+6. Allow viewing details of a selected record
+
+---
+
+# UI/UX Requirements
+
+Design the UI similar to old-school enterprise dealership systems:
+- Light gray background
+- Compact form fields
+- Multi-panel layout
+- Dense data-oriented interface
+- Thin borders
+- Small fonts
+- Left-aligned labels
+- Section/group containers
+- Toolbar/menu at top
+- Action buttons on right side
+- Professional ERP/DMS appearance
+
+The layout should resemble:
+- Vehicle Enquiry screen
+- Dealer Management System
+- Inventory/Order management software
+- Classic desktop-business software adapted for web
+
+---
+
+# Frontend Features
+
+## Main Vehicle Entry Screen
+
+Create sections such as:
+
+### Vehicle Details
+Fields:
+- Stock Number
+- VIN
+- Model Code
+- Model Description
+- Colour
+- Trim
+- Registration Number
+- Engine Number
+- Location
+- Status
+- Key Number
+- Dealer Comment
+
+### Dealer Details
+Fields:
+- Request Number
+- Dealer Name
+- Delivery Point
+- Dealer Status
+
+### Shipping Details
+Fields:
+- Ship Name
+- Voyage
+- Car Number
+- Wharf
+- Bond Number
+- Days In
+- Order Number
+
+### Delivery Details
+Fields:
+- Dealer ID
+- Order Number
+- Slip Order
+- Delivery Type
+- Finance Company
+- Release Number
+
+### Sale Details
+Fields:
+- Registration Status
+- Dealer Code
+- Registration Date
+- Reservation Status
+
+---
+
+# Functional Requirements
+
+## Form Features
+- Angular Reactive Forms
+- Form validation
+- Required field validation
+- Date pickers
+- Dropdowns
+- Submit button
+- Reset button
+
+## Backend API
+Create REST APIs:
+
+### POST
+`/api/vehicles`
+- Save vehicle data
+
+### GET
+`/api/vehicles`
+- Get all vehicle records
+
+### GET BY ID
+`/api/vehicles/{id}`
+- Get vehicle details
+
+---
+
+# Database Design
+
+Use MySQL.
+
+Create a `vehicles` table with appropriate columns for all fields.
+
+Use:
+- Auto increment primary key
+- Proper datatypes
+- Timestamp fields
+
+---
+
+# Second Screen
+
+Create another Angular page:
+`/vehicle-list`
+
+Features:
+- Data table/grid
+- Pagination
+- Search/filter
+- Sort columns
+- View details button
+
+When clicking a row:
+- Navigate to detail page
+- Show all stored information in read-only format
+
+---
+
+# Backend Architecture
+
+Use clean layered architecture:
+
+- Controller
+- Service
+- Repository
+- Entity
+- DTO
+
+Implement:
+- Exception handling
+- Validation
+- CORS configuration
+- API response structure
+
+---
+
+# Angular Architecture
+
+Use:
+- Feature modules
+- Shared components
+- Services for API calls
+- Environment configuration
+- Angular routing
+- Loading indicators
+
+---
+
+# Additional Requirements
+
+- Generate complete project structure
+- Include MySQL configuration
+- Include API integration
+- Include Angular service classes
+- Include entity models
+- Include DTOs
+- Include sample SQL schema
+- Include complete CRUD-ready foundation
+- Use enterprise coding standards
+- Keep the UI responsive but desktop-oriented
+- Use reusable components
+- Add mock sample data
+
+---
+
+# Styling Instructions
+
+The design should imitate:
+- Classic enterprise desktop systems
+- ERP software
+- Vehicle dealership management systems
+- Dense information dashboards
+
+Visual characteristics:
+- Gray panels
+- Small rectangular inputs
+- Blue action buttons
+- Compact spacing
+- Multi-column layout
+- Thin separators
+- Minimal animations
+- High information density
+
+---
+
+
+The final result should look like a real-world dealership management enterprise application.
+
 """
     )
     print("🚀 Starting the AI Software Architect...")

@@ -209,6 +209,8 @@ def _build_dependency_levels(files_dict: Dict[str, Any]) -> List[List[str]]:
 
     return levels
 
+
+
 async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
     """
     LangGraph Node: Asynchronously generates the code for each file using 
@@ -231,7 +233,7 @@ async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
 
     # 3. Retrieve the structure directly from the state
     codebase_json = state.get("project_structure")
-    project_name = codebase_json.get("project_name", "generated_project") if codebase_json else "generated_project"
+    # project_name = codebase_json.get("project_name", "generated_project") if codebase_json else "generated_project"
     
     # Fallback to reading from disk if state is somehow missing it
     if not codebase_json:
@@ -259,44 +261,50 @@ async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
     codebase_structure_str = json.dumps(codebase_json, indent=2)
 
     # 5. Concurrency setup
-    max_concurrent_calls = 15
+    max_concurrent_calls = 7
     semaphore = asyncio.Semaphore(max_concurrent_calls)
     llm = CODE_GENERATION_MODEL # Or GEMINI_31_PRO if preferred
 
     successful_files = []
 
-    # 6. Execute generation level by level
+    # 6. Execute generation level by level (WITH EXPLICIT BATCHING)
     for i, level_files in enumerate(execution_levels):
         print(f"\n>>> STARTING LEVEL {i} ({len(level_files)} files) <<<")
         execution_log.append(f"Executing Level {i} with files: {level_files}")
 
-        tasks = []
-        for path in level_files:
-            file_metadata = files_dict[path]
-            dependent_paths = file_metadata.get("dependent_files", [])
+        # Break the level's files into chunks of `max_concurrent_calls`
+        for chunk_start in range(0, len(level_files), max_concurrent_calls):
+            chunk_files = level_files[chunk_start : chunk_start + max_concurrent_calls]
             
-            # Read the real contents of dependencies to pass into the prompt
-            dependent_contents_str = get_dependent_files_contents(dependent_paths)
+            print(f"    --- Processing Batch: {len(chunk_files)} files (Indices {chunk_start} to {chunk_start + len(chunk_files) - 1}) ---")
+            
+            tasks = []
+            for path in chunk_files:
+                file_metadata = files_dict[path]
+                dependent_paths = file_metadata.get("dependent_files", [])
+                
+                # Read the real contents of dependencies to pass into the prompt
+                dependent_contents_str = get_dependent_files_contents(dependent_paths)
 
-            tasks.append(
-                _generate_and_save_file(
-                    file_path= path,  # Prepend project name to the path
-                    file_metadata=file_metadata,
-                    requirements=requirements,
-                    skills_context=skills_context,
-                    codebase_structure_str=codebase_structure_str,
-                    dependent_contents_str=dependent_contents_str,
-                    llm=llm,
-                    semaphore=semaphore
+                tasks.append(
+                    _generate_and_save_file(
+                        file_path=path,  # Prepend project name to the path inside this function
+                        file_metadata=file_metadata,
+                        requirements=requirements,
+                        skills_context=skills_context,
+                        codebase_structure_str=codebase_structure_str,
+                        dependent_contents_str=dependent_contents_str,
+                        llm=llm,
+                        semaphore=semaphore
+                    )
                 )
-            )
 
-        # Run all files in the current level concurrently
-        results = await asyncio.gather(*tasks)
-        
-        # Track successes
-        level_successes = [path for path, success in zip(level_files, results) if success]
-        successful_files.extend(level_successes)
+            # Run all files in the current CHUNK concurrently and wait for them to finish
+            results = await asyncio.gather(*tasks)
+            
+            # Track successes for this specific chunk
+            chunk_successes = [path for path, success in zip(chunk_files, results) if success]
+            successful_files.extend(chunk_successes)
 
     execution_log.append(f"File generation completed. Successfully generated {len(successful_files)}/{total_files} files.")
 
@@ -306,3 +314,5 @@ async def generate_project_files_node(state: CodebaseState) -> Dict[str, Any]:
         "generated_files": successful_files,
         "execution_log": history + execution_log
     }
+
+    

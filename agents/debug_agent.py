@@ -742,42 +742,302 @@ OUTPUT REQUIREMENT
 # --- Example Usage ---
 if __name__ == "__main__":    
     req = """
-     Create a scientific calculator app in angular with the following features:
-- Basic arithmetic operations (addition, subtraction, multiplication, division)
-- Advanced functions (square root, exponentiation, logarithms)
-- Trigonometric functions (sine, cosine, tangent)
-- User-friendly interface with responsive design
-- Error handling for invalid inputs (e.g., division by zero)
-- History log of calculations
-- Option to switch between light and dark themes
-The UI should modern and intuitive, with a clean layout and clear buttons for each function. The app should be responsive and work well on both desktop and mobile devices. Please ensure that the code is well-structured and commented for maintainability.
+    Create a full-stack enterprise-style vehicle management web application inspired by classic dealership/internal ERP desktop-style systems.
+
+## Tech Stack
+### Frontend
+- Angular (latest stable version)
+- Angular Material + custom CSS for classic enterprise UI styling
+- Reactive Forms
+- Routing enabled
+- Modular architecture
+
+### Backend
+- Java Spring Boot
+- REST API architecture
+- Spring Data JPA
+- MySQL database
+- DTO + Service + Repository layered architecture
+
+---
+
+# Application Goal
+
+Build a vehicle enquiry and registration management application.
+
+The application should:
+1. Allow users to enter vehicle-related information in a large enterprise-style form
+2. Save the data into MySQL
+3. Submit the form
+4. Navigate to another screen/page
+5. Display submitted records in a searchable table/grid
+6. Allow viewing details of a selected record
+
+---
+
+# UI/UX Requirements
+
+Design the UI similar to old-school enterprise dealership systems:
+- Light gray background
+- Compact form fields
+- Multi-panel layout
+- Dense data-oriented interface
+- Thin borders
+- Small fonts
+- Left-aligned labels
+- Section/group containers
+- Toolbar/menu at top
+- Action buttons on right side
+- Professional ERP/DMS appearance
+
+The layout should resemble:
+- Vehicle Enquiry screen
+- Dealer Management System
+- Inventory/Order management software
+- Classic desktop-business software adapted for web
+
+---
+
+# Frontend Features
+
+## Main Vehicle Entry Screen
+
+Create sections such as:
+
+### Vehicle Details
+Fields:
+- Stock Number
+- VIN
+- Model Code
+- Model Description
+- Colour
+- Trim
+- Registration Number
+- Engine Number
+- Location
+- Status
+- Key Number
+- Dealer Comment
+
+### Dealer Details
+Fields:
+- Request Number
+- Dealer Name
+- Delivery Point
+- Dealer Status
+
+### Shipping Details
+Fields:
+- Ship Name
+- Voyage
+- Car Number
+- Wharf
+- Bond Number
+- Days In
+- Order Number
+
+### Delivery Details
+Fields:
+- Dealer ID
+- Order Number
+- Slip Order
+- Delivery Type
+- Finance Company
+- Release Number
+
+### Sale Details
+Fields:
+- Registration Status
+- Dealer Code
+- Registration Date
+- Reservation Status
+
+---
+
+# Functional Requirements
+
+## Form Features
+- Angular Reactive Forms
+- Form validation
+- Required field validation
+- Date pickers
+- Dropdowns
+- Submit button
+- Reset button
+
+## Backend API
+Create REST APIs:
+
+### POST
+`/api/vehicles`
+- Save vehicle data
+
+### GET
+`/api/vehicles`
+- Get all vehicle records
+
+### GET BY ID
+`/api/vehicles/{id}`
+- Get vehicle details
+
+---
+
+# Database Design
+
+Use MySQL.
+
+Create a `vehicles` table with appropriate columns for all fields.
+
+Use:
+- Auto increment primary key
+- Proper datatypes
+- Timestamp fields
+
+---
+
+# Second Screen
+
+Create another Angular page:
+`/vehicle-list`
+
+Features:
+- Data table/grid
+- Pagination
+- Search/filter
+- Sort columns
+- View details button
+
+When clicking a row:
+- Navigate to detail page
+- Show all stored information in read-only format
+
+---
+
+# Backend Architecture
+
+Use clean layered architecture:
+
+- Controller
+- Service
+- Repository
+- Entity
+- DTO
+
+Implement:
+- Exception handling
+- Validation
+- CORS configuration
+- API response structure
+
+---
+
+# Angular Architecture
+
+Use:
+- Feature modules
+- Shared components
+- Services for API calls
+- Environment configuration
+- Angular routing
+- Loading indicators
+
+---
+
+# Additional Requirements
+
+- Generate complete project structure
+- Include MySQL configuration
+- Include API integration
+- Include Angular service classes
+- Include entity models
+- Include DTOs
+- Include sample SQL schema
+- Include complete CRUD-ready foundation
+- Use enterprise coding standards
+- Keep the UI responsive but desktop-oriented
+- Use reusable components
+- Add mock sample data
+
+---
+
+# Styling Instructions
+
+The design should imitate:
+- Classic enterprise desktop systems
+- ERP software
+- Vehicle dealership management systems
+- Dense information dashboards
+
+Visual characteristics:
+- Gray panels
+- Small rectangular inputs
+- Blue action buttons
+- Compact spacing
+- Multi-column layout
+- Thin separators
+- Minimal animations
+- High information density
+
+---
+
+# Expected Output
+
+Generate:
+1. Angular frontend code
+2. Spring Boot backend code
+3. MySQL schema
+4. REST API integration
+5. Routing setup
+6. Complete form screen
+7. Listing screen
+8. Detail screen
+9. Folder structure
+10. Setup instructions
+
+The final result should look like a real-world dealership management enterprise application.
 """
 
-    prev_out = """ {'requirements': '\n     Create a scientific calculator app in angular with the following features:\n- Basic arithmetic operations (addition,    │
-│ subtraction, multiplication, division)\n- Advanced functions (square root, exponentiation, logarithms)\n- Trigonometric functions (sine, cosine, │
-│ tangent)\n- User-friendly interface with responsive design\n- Error handling for invalid inputs (e.g., division by zero)\n- History log of       │
-│ calculations\n- Option to switch between light and dark themes\nThe UI should modern and intuitive, with a clean layout and clear buttons for    │
-│ each function. The app should be responsive and work well on both desktop and mobile devices. Please ensure that the code is well-structured and │
-│ commented for maintainability.\n', 'skills': None, 'skills_text': None, 'status': 'Succeded', 'execution_log': None, 'metadata_file': None,      │
-│ 'file_paths': None, 'project_structure': None, 'agent_summary': 'Summary of Codebase Generation:\n### **Project Summary: Scientific Calculator   │
-│ Angular Application**\n\nThe codebase generation for the Scientific Calculator app has been successfully completed. The system followed a        │
-│ structured multi-level execution plan to deliver a fully functional, containerized Angular application.\n\n#### **Accomplishments & Features     │
-│ Implemented:**\n*   **Core Logic:** Developed `calculator.service.ts` and `calculator.component.ts` to handle basic arithmetic, advanced         │
-│ functions (square root, exponentiation, logs), and trigonometric operations.\n*   **User Interface:** Created a modern, responsive UI using SCSS │
-│ and HTML templates, featuring a clean layout optimized for both desktop and mobile.\n*   **State Management:** \n    *   Implemented a **History │
-│ Log** via `history.service.ts` to track previous calculations.\n    *   Developed a **Theme Engine** (`theme.service.ts`) allowing users to      │
-│ toggle between light and dark modes, supported by dedicated SVG icons and a `theme-toggle` component.\n*   **Error Handling:** Integrated logic  │
-│ to manage invalid inputs, such as division by zero and mathematical errors.\n*   **DevOps & Deployment:** \n    *   Configured **Docker**        │
-│ support with a `Dockerfile`, `docker-compose.yml`, and `.dockerignore`.\n    *   Included an **Nginx** configuration for production-ready        │
-│ hosting.\n    *   Standardized the environment with `package.json`, `tsconfig.json`, and `angular.json`.\n\n#### **Execution Highlights:**\n*    │
-│ **File Generation:** Successfully generated **28 out of 28** identified files across 5 execution levels.\n*   **Skill Integration:** The system  │
-│ successfully leveraged the `docker-essentials` skill to ensure robust containerization.\n*   **Structure:** The project follows a modular        │
-│ Angular architecture, separating concerns into components (Calculator, History, Theme-Toggle) and services (Calculator, History, Theme).\n*      │
-│ **Errors:** No errors were encountered during the generation process; all files were created according to the project metadata.\n\nThe resulting │
-│ codebase provides a maintainable, well-commented, and feature-complete scientific calculator ready for development or deployment.', 'error':     │
-│ None}  """ 
-
-    root_path = "generated\latest_2026-05-06_21-19-04"
+    prev_out = """{'requirements': '\nCreate a full-stack enterprise-style vehicle management web application inspired by classic dealership/internal ERP desktop-style systems.\n\n## Tech Stack\n### Frontend\n- Angular      │
+│ (latest stable version)\n- Angular Material + custom CSS for classic enterprise UI styling\n- Reactive Forms\n- Routing enabled\n- Modular architecture\n\n### Backend\n- Java Spring Boot\n- REST API        │
+│ architecture\n- Spring Data JPA\n- MySQL database\n- DTO + Service + Repository layered architecture\n\n---\n\n# Application Goal\n\nBuild a vehicle enquiry and registration management application.\n\nThe  │
+│ application should:\n1. Allow users to enter vehicle-related information in a large enterprise-style form\n2. Save the data into MySQL\n3. Submit the form\n4. Navigate to another screen/page\n5. Display    │
+│ submitted records in a searchable table/grid\n6. Allow viewing details of a selected record\n\n---\n\n# UI/UX Requirements\n\nDesign the UI similar to old-school enterprise dealership systems:\n- Light     │
+│ gray background\n- Compact form fields\n- Multi-panel layout\n- Dense data-oriented interface\n- Thin borders\n- Small fonts\n- Left-aligned labels\n- Section/group containers\n- Toolbar/menu at top\n-     │
+│ Action buttons on right side\n- Professional ERP/DMS appearance\n\nThe layout should resemble:\n- Vehicle Enquiry screen\n- Dealer Management System\n- Inventory/Order management software\n- Classic        │
+│ desktop-business software adapted for web\n\n---\n\n# Frontend Features\n\n## Main Vehicle Entry Screen\n\nCreate sections such as:\n\n### Vehicle Details\nFields:\n- Stock Number\n- VIN\n- Model Code\n-   │
+│ Model Description\n- Colour\n- Trim\n- Registration Number\n- Engine Number\n- Location\n- Status\n- Key Number\n- Dealer Comment\n\n### Dealer Details\nFields:\n- Request Number\n- Dealer Name\n- Delivery │
+│ Point\n- Dealer Status\n\n### Shipping Details\nFields:\n- Ship Name\n- Voyage\n- Car Number\n- Wharf\n- Bond Number\n- Days In\n- Order Number\n\n### Delivery Details\nFields:\n- Dealer ID\n- Order        │
+│ Number\n- Slip Order\n- Delivery Type\n- Finance Company\n- Release Number\n\n### Sale Details\nFields:\n- Registration Status\n- Dealer Code\n- Registration Date\n- Reservation Status\n\n---\n\n#          │
+│ Functional Requirements\n\n## Form Features\n- Angular Reactive Forms\n- Form validation\n- Required field validation\n- Date pickers\n- Dropdowns\n- Submit button\n- Reset button\n\n## Backend API\nCreate │
+│ REST APIs:\n\n### POST\n`/api/vehicles`\n- Save vehicle data\n\n### GET\n`/api/vehicles`\n- Get all vehicle records\n\n### GET BY ID\n`/api/vehicles/{id}`\n- Get vehicle details\n\n---\n\n# Database        │
+│ Design\n\nUse MySQL.\n\nCreate a `vehicles` table with appropriate columns for all fields.\n\nUse:\n- Auto increment primary key\n- Proper datatypes\n- Timestamp fields\n\n---\n\n# Second Screen\n\nCreate  │
+│ another Angular page:\n`/vehicle-list`\n\nFeatures:\n- Data table/grid\n- Pagination\n- Search/filter\n- Sort columns\n- View details button\n\nWhen clicking a row:\n- Navigate to detail page\n- Show all   │
+│ stored information in read-only format\n\n---\n\n# Backend Architecture\n\nUse clean layered architecture:\n\n- Controller\n- Service\n- Repository\n- Entity\n- DTO\n\nImplement:\n- Exception handling\n-   │
+│ Validation\n- CORS configuration\n- API response structure\n\n---\n\n# Angular Architecture\n\nUse:\n- Feature modules\n- Shared components\n- Services for API calls\n- Environment configuration\n- Angular │
+│ routing\n- Loading indicators\n\n---\n\n# Additional Requirements\n\n- Generate complete project structure\n- Include MySQL configuration\n- Include API integration\n- Include Angular service classes\n-    │
+│ Include entity models\n- Include DTOs\n- Include sample SQL schema\n- Include complete CRUD-ready foundation\n- Use enterprise coding standards\n- Keep the UI responsive but desktop-oriented\n- Use         │
+│ reusable components\n- Add mock sample data\n\n---\n\n# Styling Instructions\n\nThe design should imitate:\n- Classic enterprise desktop systems\n- ERP software\n- Vehicle dealership management systems\n-  │
+│ Dense information dashboards\n\nVisual characteristics:\n- Gray panels\n- Small rectangular inputs\n- Blue action buttons\n- Compact spacing\n- Multi-column layout\n- Thin separators\n- Minimal             │
+│ animations\n- High information density\n\n---\n\n# Expected Output\n\nGenerate:\n1. Angular frontend code\n2. Spring Boot backend code\n3. MySQL schema\n4. REST API integration\n5. Routing setup\n6.        │
+│ Complete form screen\n7. Listing screen\n8. Detail screen\n9. Folder structure\n10. Setup instructions\n\nThe final result should look like a real-world dealership management enterprise                     │
+│ application.\n\n\n', 'skills': None, 'skills_text': None, 'status': 'Succeded', 'execution_log': None, 'metadata_file': None, 'file_paths': None, 'project_structure': None, 'agent_summary': 'Summary of     │
+│ Codebase Generation:\nBased on the original requirements and the execution log, here is a summary of the codebase generation task:\n\n### **Project Overview**\nThe goal was to develop a full-stack,         │
+│ enterprise-grade Vehicle Management System with a "classic ERP" aesthetic. The application facilitates vehicle enquiry, registration, and inventory management using a dense, information-heavy UI typical of │
+│ dealership management systems (DMS).\n\n### **Accomplishments**\nThe system successfully generated a complete, multi-tier architecture consisting of **44 files** across the following layers:\n\n#### **1.   │
+│ Backend (Java Spring Boot)**\n- **Architecture:** Implemented a clean DTO-Service-Repository-Entity layered architecture.\n- **Key Components:**\n    - `VehicleController`: REST endpoints for CRUD          │
+│ operations (`/api/vehicles`).\n    - `VehicleService` & `VehicleRepository`: Business logic and Spring Data JPA integration.\n    - `Vehicle` Entity & `VehicleDTO`: Comprehensive data mapping for all 30+   │
+│ required fields (Stock No, VIN, Shipping details, etc.).\n    - **Configuration:** Global exception handling, CORS configuration for frontend integration, and MySQL database settings via                    │
+│ `application.yml`.\n\n#### **2. Frontend (Angular & Material)**\n- **UI/UX:** Created a "classic desktop" look using Angular Material with custom CSS for compact form fields, gray panels, and high-density  │
+│ layouts.\n- **Modular Design:** \n    - `VehicleModule`: Encapsulates the vehicle feature set.\n    - **Components:** \n        - `VehicleEntryComponent`: A complex Reactive Form with multi-section panels  │
+│ (Vehicle, Dealer, Shipping, Delivery, and Sale details).\n        - `VehicleListComponent`: A searchable, sortable data grid with pagination.\n        - `VehicleDetailComponent`: A read-only view for       │
+│ record inspection.\n- **State Management:** Integrated `VehicleService` for API communication and environment-specific configurations.\n\n#### **3. Infrastructure & Database**\n- **Database:** MySQL schema │
+│ generation including a `data.sql` file for mock sample data.\n- **Containerization:** Generated `Dockerlines` for both frontend and backend, along with a `docker-compose.yml` for full-stack                 │
+│ orchestration.\n- **Documentation:** Provided a `README.md` and `.env.example` for setup and deployment.\n\n### **Execution Highlights**\n- **Success Rate:** **100% (44/44 files generated)**.\n-            │
+│ **Execution Flow:** The generation followed a logical 5-level dependency order, ensuring core configurations (Level 0) were established before complex feature modules (Level 4).\n- **Skills Utilized:** The │
+│ AI leveraged specialized skills for Docker orchestration and environment configuration to ensure the enterprise application is deployment-ready.\n- **Errors:** No errors were encountered during the file    │
+│ generation or structure resolution phases.\n\n### **Final Deliverable**\nThe resulting codebase provides a production-ready foundation for a Vehicle ERP, featuring a robust backend API and a specialized,   │
+│ high-density Angular frontend tailored for professional dealership operations.', 'error': None}  """
+    root_path = "D:/Development/new_vibe_code/generated/latest_2026-05-07_09-44-03"
     try:
         os.chdir(root_path)
     except FileNotFoundError:

@@ -1,7 +1,5 @@
 import subprocess
 import threading
-import queue
-import time
 import os
 import signal
 import re
@@ -26,7 +24,7 @@ def execute_cli(
     Advanced CLI executor with REAL live logs.
 
     Features:
-    - Real-time stdout/stderr streaming
+    - Real-time stdout/stderr streaming (Zero-latency thread push)
     - LangGraph stream support
     - Non-blocking execution
     - Smart Docker auto-detaching
@@ -46,10 +44,8 @@ def execute_cli(
     """
 
     start_time = datetime.now()
-    start_timestamp = time.time()
-
     logs = []
-    log_queue = queue.Queue()
+    log_lock = threading.Lock()
 
     writer = None
 
@@ -70,40 +66,45 @@ def execute_cli(
         command = re.sub(r'(\bdocker\s+run\b)', r'\1 -d', command)
 
     def push_log(source: str, line: str):
-        """Handle log everywhere: memory, console, LangGraph stream"""
+        """Handle log everywhere INSTANTLY: memory, console, LangGraph stream"""
+        if not line:
+            return
+            
         formatted = f"[{source}] {line.rstrip()}"
-        logs.append(formatted)
+        
+        # Lock ensures stdout and stderr don't print on top of each other
+        with log_lock:
+            logs.append(formatted)
 
-        # Prevent infinite memory growth
-        if len(logs) > max_log_lines:
-            logs.pop(0)
+            # Prevent infinite memory growth
+            if len(logs) > max_log_lines:
+                logs.pop(0)
 
-        # Live terminal output
-        if stream_logs:
-            print(formatted, flush=True)
+            # Live terminal output (Instant)
+            if stream_logs:
+                print(formatted, flush=True)
 
-        # LangGraph live stream
-        if writer:
-            try:
-                writer({
-                    "type": "log",
-                    "source": source,
-                    "content": line.rstrip()
-                })
-            except Exception:
-                pass
+            # LangGraph live stream (Instant)
+            if writer:
+                try:
+                    writer({
+                        "type": "log",
+                        "source": source,
+                        "content": line.rstrip()
+                    })
+                except Exception:
+                    pass
 
-    def enqueue_output(pipe, pipe_name):
-        """Continuously read pipe output in a background thread"""
+    def read_stream(pipe, source_name):
+        """Read directly from the pipe and push immediately."""
         try:
+            # iter() reads continuously until EOF. Since the subprocess is
+            # line-buffered (bufsize=1), this yields instantly per line.
             for line in iter(pipe.readline, ''):
-                if not line:
-                    break
-                log_queue.put((pipe_name, line))
+                push_log(source_name, line)
         except Exception as e:
-            # Only log errors if the pipe didn't close naturally
             if not pipe.closed:
-                log_queue.put(("SYSTEM", f"Reader error: {str(e)}"))
+                push_log("SYSTEM", f"Reader error ({source_name}): {str(e)}")
         finally:
             try:
                 pipe.close()
@@ -112,13 +113,8 @@ def execute_cli(
 
     try:
         # Windows/Linux compatible process handling
-        creationflags = 0
-        preexec_fn = None
-
-        if os.name == "nt":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
-        else:
-            preexec_fn = os.setsid
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        preexec_fn = os.setsid if os.name != "nt" else None
 
         process = subprocess.Popen(
             command,
@@ -128,7 +124,7 @@ def execute_cli(
             stdin=subprocess.DEVNULL,
             text=True,
             universal_newlines=True,
-            bufsize=1,
+            bufsize=1,  # Line buffered for immediate flushing
             creationflags=creationflags,
             preexec_fn=preexec_fn
         )
@@ -136,71 +132,48 @@ def execute_cli(
         push_log("SYSTEM", f"Started process PID={process.pid}")
         push_log("SYSTEM", f"Executing: {command}")
 
-        # Start stdout/stderr readers (daemon threads die with main thread)
-        stdout_thread = threading.Thread(
-            target=enqueue_output,
-            args=(process.stdout, "STDOUT"),
-            daemon=True
-        )
-        stderr_thread = threading.Thread(
-            target=enqueue_output,
-            args=(process.stderr, "STDERR"),
-            daemon=True
-        )
+        # Start direct-push threads (daemon threads die with main thread)
+        stdout_thread = threading.Thread(target=read_stream, args=(process.stdout, "STDOUT"), daemon=True)
+        stderr_thread = threading.Thread(target=read_stream, args=(process.stderr, "STDERR"), daemon=True)
 
         stdout_thread.start()
         stderr_thread.start()
 
-        # Main monitoring loop
-        while True:
-            # Drain all available logs currently in the queue
-            while not log_queue.empty():
-                try:
-                    source, line = log_queue.get_nowait()
-                    push_log(source, line)
-                except queue.Empty:
-                    break
-
-            # Check if process has completed
-            if process.poll() is not None:
-                # Final flush to catch trailing logs
-                time.sleep(0.2)
-                while not log_queue.empty():
+        # Efficiently wait for the process instead of polling with sleep()
+        try:
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            push_log("SYSTEM", f"Timeout reached ({timeout}s). Killing process...")
+            try:
+                # Kill full process tree
+                if os.name == "nt":
+                    process.send_signal(signal.CTRL_BREAK_EVENT)
                     try:
-                        source, line = log_queue.get_nowait()
-                        push_log(source, line)
-                    except queue.Empty:
-                        break
-                break
+                        process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                else:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            except Exception as kill_error:
+                push_log("SYSTEM", f"Kill error: {str(kill_error)}")
 
-            # Timeout check
-            elapsed = time.time() - start_timestamp
-            if elapsed > timeout:
-                push_log("SYSTEM", f"Timeout reached ({timeout}s). Killing process...")
-                try:
-                    # Kill full process tree
-                    if os.name == "nt":
-                        process.send_signal(signal.CTRL_BREAK_EVENT)
-                        time.sleep(1)
-                        if process.poll() is None:
-                            process.kill()
-                    else:
-                        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                except Exception as kill_error:
-                    push_log("SYSTEM", f"Kill error: {str(kill_error)}")
+            # Wait briefly to catch final logs produced during kill
+            stdout_thread.join(timeout=1.0)
+            stderr_thread.join(timeout=1.0)
 
-                return (
-                    f"STATUS: TIMEOUT\n"
-                    f"COMMAND: {command}\n"
-                    f"TIMEOUT: {timeout}s\n"
-                    f"STARTED: {start_time}\n"
-                    f"EXIT CODE: KILLED\n\n"
-                    f"FULL LOGS:\n"
-                    + "\n".join(logs)
-                )
+            return (
+                f"STATUS: TIMEOUT\n"
+                f"COMMAND: {command}\n"
+                f"TIMEOUT: {timeout}s\n"
+                f"STARTED: {start_time}\n"
+                f"EXIT CODE: KILLED\n\n"
+                f"FULL LOGS:\n"
+                + "\n".join(logs)
+            )
 
-            # Prevent CPU pegging
-            time.sleep(0.05)
+        # Ensure threads finish reading trailing output
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
 
         end_time = datetime.now()
         duration = round((end_time - start_time).total_seconds(), 2)
