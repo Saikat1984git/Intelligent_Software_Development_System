@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iSDS Orchestrator Interface</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f111a;
+            --panel-bg: #1e2130;
+            --border-color: #2b2f42;
+            --text-main: #e2e2e2;
+            --accent-color: #00e5ff;
+            --user-msg: #2a304a;
+            --ai-msg: #1a1c23;
+            --term-bg: #000000;
+            --term-text: #00ff00;
+            --error-text: #ff4d4d;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: var(--panel-bg);
+            padding: 15px 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 1.2rem;
+            color: var(--accent-color);
+            letter-spacing: 1px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .dot {
+            height: 10px;
+            width: 10px;
+            background-color: var(--error-text);
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+        .dot.connected { background-color: var(--term-text); }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Chat Panel Styles */
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color);
+            background-color: var(--panel-bg);
+        }
+
+        .chat-history {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 8px;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            background-color: var(--user-msg);
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
+        }
+
+        .message.ai {
+            background-color: var(--ai-msg);
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            border: 1px solid var(--border-color);
+        }
+
+        .message.ai pre {
+            background-color: #0b0c10;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin-top: 8px;
+        }
+
+        .message.ai code {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+        }
+
+        .input-area {
+            padding: 20px;
+            background-color: var(--panel-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 12px 15px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-area input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .input-area button {
+            padding: 12px 24px;
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .input-area button:hover {
+            opacity: 0.8;
+        }
+
+        /* Terminal Logs Styles */
+        .log-panel {
+            flex: 1;
+            background-color: var(--term-bg);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-header {
+            background-color: #1a1a1a;
+            color: #888;
+            padding: 10px 20px;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #333;
+        }
+
+        .terminal-output {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .log-line { color: #888; margin-bottom: 4px; }
+        .term-line { color: var(--term-text); margin-bottom: 4px; white-space: pre-wrap; }
+        .error-line { color: var(--error-text); margin-bottom: 4px; white-space: pre-wrap; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>iSDS Orchestrator UI</h1>
+        <div class="status-indicator">
+            <div class="dot" id="status-dot"></div>
+            <span id="status-text">Disconnected</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="chat-panel">
+            <div class="chat-history" id="chat-history">
+                </div>
+            <div class="input-area">
+                <input type="text" id="user-input" placeholder="Enter system commands or tasks..." autocomplete="off">
+                <button id="send-btn">Send</button>
+            </div>
+        </div>
+
+        <div class="log-panel">
+            <div class="log-header">System Live Logs</div>
+            <div class="terminal-output" id="terminal-output">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const chatHistory = document.getElementById('chat-history');
+        const terminalOutput = document.getElementById('terminal-output');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+
+        // WebSocket Connection
+        let ws;
+
+        function connectWebSocket() {
+            // Pointing to the FastAPI backend
+            ws = new WebSocket("ws://localhost:8000/ws/chat");
+
+            ws.onopen = () => {
+                statusDot.classList.add('connected');
+                statusText.innerText = "Connected to Orchestrator";
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === "log") {
+                    appendTerminal(data.content, "log-line");
+                } 
+                else if (data.type === "terminal_log") {
+                    appendTerminal(data.content, "term-line");
+                } 
+                else if (data.type === "response") {
+                    // Parse Markdown for the final AI response
+                    appendChat(marked.parse(data.content), "ai");
+                } 
+                else if (data.type === "error") {
+                    appendTerminal(data.content, "error-line");
+                }
+            };
+
+            ws.onclose = () => {
+                statusDot.classList.remove('connected');
+                statusText.innerText = "Disconnected - Retrying in 3s...";
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (err) => {
+                console.error("WebSocket encountered error: ", err, "Closing socket");
+                ws.close();
+            };
+        }
+
+        // Initialize connection
+        connectWebSocket();
+
+        // UI Manipulation Functions
+        function appendChat(content, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', sender);
+            
+            if (sender === 'ai') {
+                msgDiv.innerHTML = content; // Render parsed Markdown HTML
+            } else {
+                msgDiv.innerText = content; // Render raw text for user
+            }
+            
+            chatHistory.appendChild(msgDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight; // Auto-scroll
+        }
+
+        function appendTerminal(content, styleClass) {
+            const lineDiv = document.createElement('div');
+            lineDiv.classList.add(styleClass);
+            lineDiv.innerText = content;
+            terminalOutput.appendChild(lineDiv);
+            terminalOutput.scrollTop = terminalOutput.scrollHeight; // Auto-scroll
+        }
+
+        function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // 1. Render in UI
+            appendChat(text, "user");
+            
+            // 2. Send to Backend
+            // Note: The FastAPI backend automatically maintains the conversation history 
+            // list in memory for the duration of this WebSocket connection.
+            ws.send(text);
+            
+            // 3. Clear input
+            userInput.value = "";
+        }
+
+        // Event Listeners
+        sendBtn.addEventListener('click', sendMessage);
+        
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
