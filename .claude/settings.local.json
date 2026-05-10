@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd D:\\\\Final Projects\\\\Intelligent_Software_Development_System\\\\frontend)",
+      "Bash(npm install *)",
+      "Bash(npx vite *)",
+      "Bash(Start-Sleep *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":8000\")",
+      "Bash(tasklist)",
+      "Bash(findstr \"16564\")",
+      "Bash(curl *)",
+      "Bash(taskkill *)",
+      "PowerShell(Stop-Process *)",
+      "Bash(python server.py)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -m pip install rich)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" server.py)",
+      "Bash(findstr \"LISTENING\")",
+      "Bash(findstr \":5173\")",
+      "Bash(npm run *)",
+      "Bash(Get-Content \"C:\\\\Users\\\\ARIJIT~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\D--Final-Projects-Intelligent-Software-Development-System\\\\ac8082ed-9232-4473-b9cb-e04a5321838a\\\\tasks\\\\brmmpjvar.output\" -Tail 30)",
+      "Bash(node node_modules/vite/bin/vite.js build)",
+      "Bash(npm *)"
+    ]
+  }
+}
