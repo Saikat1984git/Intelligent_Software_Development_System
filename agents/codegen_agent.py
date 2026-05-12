@@ -192,7 +192,7 @@ async def run_codegeneration_agent(user_requirements):
             )
         )
 
-        return final_state["agent_summary"] if "agent_summary" in final_state else None
+        return f"""PROJECT PATH:{os.getcwd()}\nAGENT SUMMARY:{final_state["agent_summary"] if "agent_summary" in final_state else "No agent summary available."}"""
 
 
     except Exception as e:

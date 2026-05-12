@@ -1,168 +1,111 @@
 import os
 import json
-import glob
-from typing import List, Dict
+import sys
+import base64
+from typing import List, Dict, Optional
+from pathlib import Path
 from pydantic import BaseModel, Field
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_openai import ChatOpenAI
 
-from langchain_core.tools import tool
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
-
-# Importing the models as per your setup
-from models.gemini_models import GEMINI_31_PRO
-from models.openai_models import GPT_4O_MINI, GPT_5_MINI_TEST, GPT_52_CHAT, GPT_51_CODEX_MINI, GPT_53_CODEX
-
-
-# ==========================================
-# 1. Pydantic Models for Structured Output
-# ==========================================
-
-class FileSelection(BaseModel):
-    target_files: List[str] = Field(
-        description="List of relative file paths that need editing to fix the issue"
-    )
+# Import our tools
+from tools.codebase_indexer import create_codebase_structure_v2, analyze_project_complete
+from tools.file_editor import apply_file_edits
 
 
-class FileUpdate(BaseModel):
-    file_path: str = Field(
-        description="The  path of the file to be updated"
-    )
-    content: str = Field(
-        description="The complete new, fixed content for the file"
-    )
+# Pydantic models for structured output
+class FileContent(BaseModel):
+    file_path: str = Field(description="The relative file path")
+    content: str = Field(description="The rewritten code content")
+
+class RewrittenFiles(BaseModel):
+    files: List[FileContent] = Field(description="List of files with rewritten content")
 
 
-class CodebaseMap(BaseModel):
-    files: List[FileUpdate] = Field(
-        description="List of complete file path related to project root to update with their new content"
-    )
-
-
-SELECTION_LLM = GPT_4O_MINI.with_structured_output(FileSelection)
-FIX_LLM = GPT_53_CODEX.with_structured_output(CodebaseMap)
-
-
-# ==========================================
-# 2. LangChain Tool Definition
-# ==========================================
-
-
-def code_editing_agent(edit_prompt: str, project_folder_path: str) -> str:
+def choose_edit_filepaths(json_filepath: str, edit_prompt: str, max_paths: int = 8) -> List[str]:
     """
-    Analyzes project metadata to decide which files need fixing, extracts their content,
-    sends them to GEMINI_31_PRO to generate the corrected code, and updates the files on disk.
-
-    Send the absolute path of the project folder and the issue to be fixed.
-    The agent will handle the rest, including locating the latest metadata snapshot,
-    determining which files to edit, and applying the fixes.
+    Simple file path selector based on the project structure JSON.
     """
+    json_path = Path(json_filepath)
+    if not json_path.exists():
+        raise FileNotFoundError(f"JSON file not found: {json_filepath}")
 
-    print("\n==================================================")
-    print("🚀 STARTING CODE FIXING AGENT")
-    print("==================================================")
-    print(f"Issue: {edit_prompt}")
-    print(f"Target Directory: {project_folder_path}")
-    print("==================================================\n")
+    with json_path.open("r", encoding="utf-8") as f:
+        project_struct = json.load(f)
 
-    # --- STEP 1: Locate and Read Metadata ---
-    print("[Step 1] Locating and reading project metadata...")
+    # Extract all file paths from structure
+    all_files = []
 
-    latest_dir = project_folder_path
-    metadata_path = os.path.join(latest_dir, "project_metadata.json")
+    def extract_files(data, prefix=""):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                path = f"{prefix}/{key}" if prefix else key
+                if isinstance(value, dict):
+                    # It's a directory
+                    extract_files(value, path)
+                else:
+                    # It's a file - the value is the full path
+                    all_files.append(value if isinstance(value, str) else path)
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, str):
+                    all_files.append(item)
 
-    if not os.path.exists(metadata_path):
-        error_msg = f"Error: project_metadata.json not found at {metadata_path}"
-        print(f"✖ {error_msg}")
-        return error_msg
+    extract_files(project_struct)
 
-    with open(metadata_path, "r", encoding="utf-8") as f:
-        metadata = json.load(f)
+    # Simple heuristic: find files that match keywords in the prompt
+    keywords = edit_prompt.lower().split()
+    scored_files = []
 
-    metadata_str = json.dumps(metadata, indent=2)
-    print(f"Metadata snapshot loaded from: {metadata_str[:200]}...")  # Print the beginning of the metadata for verification
+    for f in all_files:
+        filename = os.path.basename(f).lower()
+        score = 0
+        for kw in keywords:
+            if kw in filename:
+                score += 10
+            if kw in f.lower():
+                score += 5
+        scored_files.append((score, f))
 
-    print("✔ Metadata loaded successfully.")
+    # Sort by score and return top matches
+    scored_files.sort(key=lambda x: -x[0])
+    return [f[1] for f in scored_files[:max_paths]]
 
-    # --- STEP 2: Decide Which Files to Edit ---
-    print("[Step 2] Analyzing metadata to select target files...")
 
-    max_paths = 10
+def read_file_contents(file_paths: List[str], root_path: str) -> Dict[str, str]:
+    """Read content from all specified files."""
+    file_contents = {}
+    for rel_path in file_paths:
+        full_path = Path(root_path) / rel_path
+        if not full_path.exists():
+            print(f"File not found: {full_path}, will be created")
+            file_contents[rel_path] = ""
+            continue
+        with open(full_path, "r", encoding="utf-8") as f:
+            file_contents[rel_path] = f.read()
+    return file_contents
 
-    selection_sys_prompt = (
-        "You are a codebase router whose sole task is to choose the most relevant set "
-        "of existing files to edit based on a user's request. The request will typically be "
-        "either adding a new feature or debugging/fixing an existing issue.\n\n"
-        "OUTPUT FORMAT:\n"
-        "- Return ONLY valid JSON: {\"paths\": [\"file1_path\", \"file2_path\"]}\n"
-        f"- Maximum entries: {max_paths}\n"
-        "- Do NOT add explanations, markdown blocks, or extra text.\n\n"
-        "SELECTION RULES:\n"
-        "1) FOR FEATURE ADDITIONS: Select core files where new UI components, business logic, state management, or routing must be integrated.\n"
-        "2) FOR BUG FIXES: Select files most likely to contain the faulty logic, focusing on modules related to the described unexpected behavior or stack trace.\n"
-        "3) Prefer dependency proximity (e.g., select a component and its direct data-fetching service if both require changes).\n"
-        "4) Give the complete paths of the files relative to the project root, ensuring they are valid and exist in the metadata snapshot.\n"
-        "5) Avoid unrelated, compiled, or autogenerated files.\n"
 
+def rewrite_with_gpt(
+    file_paths: List[str],
+    root_path: str,
+    project_content: str,
+    prompt: str,
+    model_name: str = "gpt-4o"
+) -> Dict[str, str]:
+    """Rewrite code using GPT models."""
+    from models.openai_models import GPT_53_CODEX, GPT_4O_MINI
+
+    # Use the best available model
+    llm = GPT_53_CODEX.with_structured_output(RewrittenFiles)
+
+    # Read file contents
+    file_contents = read_file_contents(file_paths, root_path)
+
+    files_json = json.dumps(
+        [{"file_path": p, "content": c} for p, c in file_contents.items()],
+        indent=2
     )
-
-    user_block = (
-        "--- EDIT REQUEST ---\n"
-        "Analyze the following request to determine if it is a feature addition or a bug fix:\n"
-        f"{edit_prompt}\n\n"
-        "--- Project Metadata: ---\n"
-        + "```json\n"
-        + metadata_str
-        + "\n```"
-        "Remember: Return ONLY valid JSON with the selected file paths."
-    )
-
-    selection_messages = [
-        SystemMessage(content=selection_sys_prompt),
-        HumanMessage(content=user_block)
-    ]
-
-    print("Waiting for Architect Agent (SELECTION_LLM) to choose files...")
-
-    selection_response: FileSelection = SELECTION_LLM.invoke(
-        selection_messages
-    )
-
-    target_files = selection_response.target_files
-    print(f"SELECTION_LLM response: {target_files}")
-
-    if not target_files:
-        abort_msg = (
-            "Task aborted: The agent determined that no files require "
-            "modification to resolve this issue."
-        )
-        print(f"✖ {abort_msg}")
-        return abort_msg
-
-    print("✔ Architect Agent selected the following files:")
-    print(f"↳ {', '.join(target_files)}")
-
-    # --- STEP 3: Gather Content of Target Files ---
-    print("[Step 3] Gathering content of target files...")
-
-    files_context = {}
-
-    for rel_path in target_files:
-        abs_path = os.path.join(project_folder_path, rel_path)
-
-        if os.path.exists(abs_path):
-            with open(abs_path, "r", encoding="utf-8") as f:
-                files_context[rel_path] = f.read()
-        else:
-            files_context[rel_path] = (
-                f"// New file to be created or file missing on disk: {rel_path}"
-            )
-            print(f"⚠ File not found on disk, marked for creation: {rel_path}")
-
-    context_json = json.dumps(files_context, indent=2)
-
-    print("✔ File contents gathered.")
-
-    # --- STEP 4: Send to Gemini 3.1 Pro for the Code Fix ---
-    print("[Step 4] Generating fixed code using GEMINI_31_PRO...")
 
     system_prompt = (
         "You are an expert code refactoring assistant.\n"
@@ -171,105 +114,181 @@ def code_editing_agent(edit_prompt: str, project_folder_path: str) -> str:
         "1. Analyze each file's code.\n"
         "2. Apply the requested changes according to the prompt.\n"
         "3. Return the rewritten code for each provided file.\n"
-        "4. Identify and generate any new files that are necessary to fully implement the changes or improve the architecture, even if they are not present in the current project.\n"
+        "4. Identify and generate any new files that are necessary to fully implement the changes.\n"
         "5. Ensure that the rewritten code is functional, maintainable, and adheres to best practices.\n"
-        "6. Asset Generation: If you need to create new image files, generate only SVG files. For all other images or media types, use external URLs instead of creating local files.\n"
         "Maintain code quality, follow best practices, and preserve functionality unless instructed otherwise."
     )
 
-    history = []
-
     user_prompt = (
-        "Here is the current codebase structure and content in JSON format:\n\n"
-        f"{metadata_str}\n\n"
+        "Here is the current codebase structure in JSON format:\n\n"
+        f"{project_content}\n\n"
         "Here are the files to rewrite:\n\n"
-        f"{context_json}\n\n"
-        "Issue in the code:\n"
-        f"{edit_prompt}\n\n"
-        "Please rewrite the code for each file according to the instructions above.\n"
+        f"{files_json}\n\n"
+        "Rewriting instructions:\n"
+        f"{prompt}\n\n"
+        "Please rewrite the code for each file according to the instructions above."
     )
 
     messages = [
         SystemMessage(content=system_prompt),
-        AIMessage(content=f"LLM Output History:\n{chr(10).join(history)}"),
         HumanMessage(content=user_prompt),
     ]
 
-    print("Waiting for Developer Agent (FIX_LLM) to write code...")
+    print("Invoking GPT model for code rewriting...")
+    response = llm.invoke(messages)
 
-    response: CodebaseMap = FIX_LLM.invoke(messages)
+    if not response or not response.files:
+        return {}
 
-        # ... [Previous setup and LLM invocation code remains the same] ...
+    return {f.file_path: f.content for f in response.files}
 
-    print(f"✔ Code successfully generated for {len(response.files)} files.")
 
-    # --- STEP 5: Update and Create Files on Disk ---
-    print("[Step 5] Writing files to disk...")
+def code_editing_agent(
+    edit_prompt: str,
+    project_folder_path: str,
+    images: list = None,
+    logger=None
+) -> str:
+    """
+    Code editing pipeline that uses GPT for rewriting.
 
-    updated_list = []
-    created_list = []
+    Args:
+        edit_prompt: Description of the desired changes
+        project_folder_path: Absolute path to the project directory
+        images: Optional list of image dicts (not currently used with GPT)
+        logger: Optional logger function
 
-    for file_update in response.files:
-        abs_path = os.path.join(
-            project_folder_path,
-            file_update.file_path
+    Returns:
+        Status message about the operation
+    """
+    images = images or []
+
+    def log(msg):
+        print(msg)
+        if logger:
+            logger(msg)
+
+    log("=" * 60)
+    log("STARTING CODE EDITING PIPELINE")
+    log("=" * 60)
+    log(f"Project: {project_folder_path}")
+    log(f"Prompt: {edit_prompt}")
+    if images:
+        log(f"Images: {len(images)} file(s)")
+    log("=" * 60)
+
+    # Validate project path
+    if not os.path.exists(project_folder_path):
+        return f"ERROR: Project path does not exist: {project_folder_path}"
+
+    # STEP 1: Analyze project structure
+    log("\n[Step 1] Analyzing project structure...")
+
+    class SimpleLogger:
+        def __init__(self, func):
+            self.func = func
+        def info(self, msg, *args):
+            self.func(msg % args if args else msg)
+
+    try:
+        stats = analyze_project_complete(
+            project_path=project_folder_path,
+            output_json=os.path.join(project_folder_path, "project_structure.json"),
+            logger_function=SimpleLogger(log)
         )
+        log(f"Analyzed {stats['total_files']} files")
+    except Exception as e:
+        log(f"ERROR in analysis: {e}")
+        return f"ERROR: Failed to analyze project: {e}"
 
-        # Determine if this is a new file before creating directories/writing
-        is_new_file = not os.path.exists(abs_path)
+    json_file = os.path.join(project_folder_path, "project_structure.json")
 
-        # Ensure target directory structures exist
-        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    # STEP 2: Choose files to edit
+    log("\n[Step 2] Selecting files to edit...")
+    try:
+        filepaths = choose_edit_filepaths(json_file, edit_prompt)
+        if not filepaths:
+            log("WARNING: No files selected, but continuing...")
+            filepaths = []
+        log(f"Selected {len(filepaths)} files: {filepaths}")
+    except Exception as e:
+        log(f"ERROR in file selection: {e}")
+        return f"ERROR: Failed to select files: {e}"
 
-        # Write the content to disk (creates new or overwrites existing)
-        with open(abs_path, "w", encoding="utf-8") as f:
-            f.write(file_update.content)
+    if not filepaths:
+        return "WARNING: No files matched the edit request. No changes made."
 
-        # Track and log based on file status
-        if is_new_file:
-            created_list.append(file_update.file_path)
-            print(f"↳ Created new file: {file_update.file_path}")
-        else:
-            updated_list.append(file_update.file_path)
-            print(f"↳ Wrote changes to: {file_update.file_path}")
+    # STEP 3: Read file contents and rewrite with GPT
+    log("\n[Step 3] Rewriting code with GPT...")
 
-    print(f"✔ All files processed on disk ({len(updated_list)} updated, {len(created_list)} created).")
+    try:
+        # Read project structure for context
+        with open(json_file, 'r') as f:
+            project_content = f.read()
 
-    # --- STEP 6: Return Message to the Agent ---
-    # Dynamically build the success message for accurate agent context
-    success_msg_parts = ["Success. The codebase has been processed."]
-    
-    if updated_list:
-        success_msg_parts.append(f"Updated files: {', '.join(updated_list)}.")
-    if created_list:
-        success_msg_parts.append(f"Newly created files: {', '.join(created_list)}.")
+        rewritten = rewrite_with_gpt(
+            file_paths=filepaths,
+            root_path=project_folder_path,
+            project_content=project_content,
+            prompt=edit_prompt
+        )
+        log(f"Rewritten {len(rewritten)} files")
 
-    success_msg = " ".join(success_msg_parts)
-    
-    # You can now pass success_msg back into your agent's memory or observation loop
+    except Exception as e:
+        log(f"ERROR in code rewriting: {e}")
+        import traceback
+        log(traceback.format_exc())
+        return f"ERROR: Failed to rewrite code: {e}"
 
-    print("\n==================================================")
-    print("🎉 AGENT TASK COMPLETE")
-    print("==================================================")
-    print(success_msg)
-    print("==================================================\n")
+    if not rewritten:
+        log("WARNING: No content returned from rewrite tool")
+        return "WARNING: No content returned from rewrite tool"
 
-    return success_msg
+    # STEP 4: Apply file edits
+    log("\n[Step 4] Applying file edits...")
 
+    try:
+        summary = apply_file_edits(
+            project_root=project_folder_path,
+            file_map=rewritten,
+            dry_run=False,
+            backup_existing=True,
+        )
+        log(f"File edits applied: created={summary.get('created', 0)}, updated={summary.get('updated', 0)}, failed={summary.get('failed', 0)}")
+    except Exception as e:
+        log(f"ERROR applying file edits: {e}")
+        import traceback
+        log(traceback.format_exc())
+        return f"ERROR: Failed to apply edits: {e}"
+
+    # Build success message
+    success_parts = []
+    if summary.get('created', 0) > 0:
+        success_parts.append(f"Created {summary['created']} file(s)")
+    if summary.get('updated', 0) > 0:
+        success_parts.append(f"Updated {summary['updated']} file(s)")
+    if summary.get('failed', 0) > 0:
+        success_parts.append(f"Failed {summary['failed']} file(s)")
+
+    result_msg = " | ".join(success_parts) if success_parts else "No changes made"
+    log("\n" + "=" * 60)
+    log(f"COMPLETE: {result_msg}")
+    log("=" * 60)
+
+    return f"Success. {result_msg}"
 
 
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 3:
+        print("Usage: python code_editing_agent.py <project_path> <prompt>")
+        sys.exit(1)
 
-    project_path = "D:/Development/new_vibe_code/generated/latest_2026-05-07_10-43-55"
-
-    prompt = """
-    Make the UI more modern and visually appealing.  Use a clean, minimalist design with a light color scheme. Ensure the layout is responsive for both desktop and mobile devices.
-    """
+    project_path = sys.argv[1]
+    prompt = sys.argv[2]
 
     result = code_editing_agent(
         edit_prompt=prompt,
         project_folder_path=project_path
     )
-
-    print("\nFINAL RESULT:")
-    print(result)
+    print("\nRESULT:", result)

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "f811f670-87da-4e95-afe1-a129c1f3cbf6",
+    "username": "testuser",
+    "email": "test@example.com",
+    "password": "$2b$12$frM85sI0fIiXKjO9eUkyRObAlktT93Y8muUCP457SKCQEU4U6XTve",
+    "created_at": "2026-05-10T15:25:04.298146"
+  },
+  {
+    "id": "a9380507-51e2-4c9e-906c-a57f70cd380f",
+    "username": "abc",
+    "email": "abc@gmial.com",
+    "password": "$2b$12$T0xy6M49SKSqp9gYakR79OP/uRS1YbpYCCewNktH.RdF6wTIZU6Ne",
+    "created_at": "2026-05-10T15:25:23.525472"
+  },
+  {
+    "id": "d6d0db8b-8374-45f4-ba20-30fc196becc8",
+    "username": "Saikat",
+    "email": "saikatc@interrait.com",
+    "password": "$2b$12$aWQCBcgV.8q78FVVQ.v4gelMWyWnRTW58ui/7ylVbb8KVQsNHLWwi",
+    "created_at": "2026-05-11T20:04:42.402775"
+  },
+  {
+    "id": "1f08daa5-e32b-4d2c-a839-150fe6c375e4",
+    "username": "vishal",
+    "email": "vishal@interrait.com",
+    "password": "$2b$12$TXas5LuAm3MbmMnPlieRgO6y24zWglmc5VGLhzkUvsbhFq70JoUde",
+    "created_at": "2026-05-11T20:16:34.679703"
+  }
+]

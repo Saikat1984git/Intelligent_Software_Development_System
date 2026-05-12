@@ -12,20 +12,45 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const DashboardLayout = ({ children }) => {
-  // State for Sidebar
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
+  // State for Sidebar - persist to localStorage to survive navigation
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('sidebarOpen');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebarCollapsed');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // Persist sidebar state to localStorage on change
+  React.useEffect(() => {
+    localStorage.setItem('sidebarOpen', JSON.stringify(isSidebarOpen));
+  }, [isSidebarOpen]);
+
+  React.useEffect(() => {
+    localStorage.setItem('sidebarCollapsed', JSON.stringify(isSidebarCollapsed));
+  }, [isSidebarCollapsed]);
+
   const { darkMode, toggleTheme } = useTheme();
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   // Calculate sidebar width class for main content margin
   const sidebarMarginClass = isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64';
 
   return (
     <div
-        className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${
+        className={`h-screen flex flex-col font-sans transition-colors duration-300 ${
           darkMode
             ? 'bg-slate-900 text-white'
             : 'bg-slate-50 text-slate-900'
@@ -39,9 +64,11 @@ const DashboardLayout = ({ children }) => {
         setIsSidebarCollapsed={setIsSidebarCollapsed}
         darkMode={darkMode}
         toggleTheme={toggleTheme}
+        user={user}
+        onLogout={handleLogout}
       />
 
-      <div className="flex flex-1 overflow-hidden pt-16 lg:pt-0">
+      <div className="flex h-full overflow-hidden pt-16 lg:pt-0">
         {/* --- LEFT SIDEBAR --- */}
         <SideNavbar
           isSidebarOpen={isSidebarOpen}
@@ -49,6 +76,7 @@ const DashboardLayout = ({ children }) => {
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
           darkMode={darkMode}
+          onLogout={handleLogout}
         />
 
         {/* --- PAGE CONTENT (Route Injection Point) --- */}
@@ -67,7 +95,24 @@ const DashboardLayout = ({ children }) => {
 };
 
 // --- Sub-Component: Top Header ---
-const TopNavbar = ({ isSidebarOpen, setIsSidebarOpen, darkMode, toggleTheme }) => {
+const TopNavbar = ({ isSidebarOpen, setIsSidebarOpen, darkMode, toggleTheme, user, onLogout }) => {
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const menuRef = React.useRef(null);
+
+  // Close menu when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const userName = user?.name || user?.username || user?.email || 'User';
+  const displayInitial = userName.charAt(0).toUpperCase();
+
   return (
     <header
   className={`
@@ -140,12 +185,52 @@ const TopNavbar = ({ isSidebarOpen, setIsSidebarOpen, darkMode, toggleTheme }) =
           }`}></span>
         </button>
 
-        <div className={`h-9 w-9 rounded-xl flex items-center justify-center cursor-pointer transition-all ${
-          darkMode
-            ? 'bg-gradient-to-br from-white/20 to-white/5 border border-white/20 hover:bg-white/10'
-            : 'bg-slate-100 border border-slate-200 hover:bg-slate-200'
-        }`}>
-          <User size={18} className={darkMode ? 'text-white/90' : 'text-slate-600'} />
+        {/* User Menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className={`h-9 w-9 rounded-xl flex items-center justify-center cursor-pointer transition-all ${
+              darkMode
+                ? 'bg-gradient-to-br from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500'
+                : 'bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500'
+            }`}
+          >
+            <span className="text-white font-semibold text-sm">{displayInitial}</span>
+          </button>
+
+          {/* Dropdown Menu */}
+          {showUserMenu && (
+            <div className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg py-1 z-50 transition-all ${
+              darkMode
+                ? 'bg-slate-800 border border-slate-700'
+                : 'bg-white border border-slate-200'
+            }`}>
+              <div className={`px-4 py-2 border-b ${
+                darkMode ? 'border-slate-700' : 'border-slate-100'
+              }`}>
+                <p className={`text-sm font-medium ${
+                  darkMode ? 'text-white' : 'text-slate-900'
+                }`}>{userName}</p>
+                <p className={`text-xs ${
+                  darkMode ? 'text-slate-400' : 'text-slate-500'
+                }`}>{user?.email || 'Logged in'}</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUserMenu(false);
+                  onLogout();
+                }}
+                className={`w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                  darkMode
+                    ? 'text-red-400 hover:bg-slate-700'
+                    : 'text-red-600 hover:bg-red-50'
+                }`}
+              >
+                <LogOut size={16} />
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -153,12 +238,12 @@ const TopNavbar = ({ isSidebarOpen, setIsSidebarOpen, darkMode, toggleTheme }) =
 };
 
 // --- Sub-Component: Left Sidebar ---
-const SideNavbar = ({ isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIsSidebarCollapsed, darkMode }) => {
+const SideNavbar = ({ isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIsSidebarCollapsed, darkMode, onLogout }) => {
   // Navigation Links
   const navItems = [
     { id: 'codegen', label: 'Code Generation', icon: <Code2 size={20} /> },
     { id: 'codemod', label: 'Code Modification', icon: <PenTool size={20} /> },
-    { id: 'sysdesign', label: 'System Design', icon: <Layout size={20} /> },
+    { id: 'support', label: 'Bug Support', icon: <Layout size={20} /> },
   ];
 
   // Calculate width based on collapsed state
@@ -237,20 +322,6 @@ const SideNavbar = ({ isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIs
               </a>
             ))}
           </nav>
-        </div>
-
-        {/* Footer */}
-        <div className={`p-4 border-t transition-colors ${
-          darkMode
-            ? 'border-slate-800 bg-slate-950'
-            : 'border-slate-100 bg-slate-50'
-        } ${isSidebarCollapsed ? 'lg:px-2 lg:flex lg:justify-center' : ''}`}>
-          <button className={`flex items-center gap-3 text-sm font-medium text-red-500 hover:text-red-600 hover:bg-red-500/10 rounded transition-colors ${
-            isSidebarCollapsed ? 'lg:justify-center' : ''
-          }`}>
-            <LogOut size={18} />
-            {!isSidebarCollapsed && <span>Logout</span>}
-          </button>
         </div>
       </aside>
     </>
