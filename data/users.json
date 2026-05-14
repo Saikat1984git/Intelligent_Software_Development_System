@@ -26,5 +26,12 @@
     "email": "vishal@interrait.com",
     "password": "$2b$12$TXas5LuAm3MbmMnPlieRgO6y24zWglmc5VGLhzkUvsbhFq70JoUde",
     "created_at": "2026-05-11T20:16:34.679703"
+  },
+  {
+    "id": "b8534be8-7ad9-48f4-80c5-5628ed93596f",
+    "username": "Buddhadip",
+    "email": "buddhadipm@interrait.com",
+    "password": "$2b$12$zg7MlpPtk0EVvD4BvcWnDuRowLHg3Afj6N83Aa6DxkhOnl33vdTLu",
+    "created_at": "2026-05-14T11:58:00.337042"
   }
 ]
