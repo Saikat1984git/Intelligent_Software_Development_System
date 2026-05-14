@@ -9,14 +9,14 @@ import WorkflowProgress, {
 } from '../components/atoms/WorkflowProgress';
 
 // Molecules
-import ChatMessage          from '../components/molecules/ChatMessage';
-import ConsoleLog           from '../components/molecules/ConsoleLog';
-import FileExplorer         from '../components/molecules/FileExplorer';
-import SuccessOutput        from '../components/molecules/SuccessOutput';
-import DebugConfirmBar      from '../components/molecules/DebugConfirmBar';
+import ChatMessage from '../components/molecules/ChatMessage';
+import ConsoleLog from '../components/molecules/ConsoleLog';
+import FileExplorer from '../components/molecules/FileExplorer';
+import SuccessOutput from '../components/molecules/SuccessOutput';
+import DebugConfirmBar from '../components/molecules/DebugConfirmBar';
 
 // Hooks
-import useResizablePanel    from '../hooks/useResizablePanel';
+import useResizablePanel from '../hooks/useResizablePanel';
 
 // Utils
 import { stripAnsi, categorizeLog, parseSummary } from '../utils/logUtils';
@@ -32,37 +32,37 @@ const Codegen = () => {
   /* ── State ─────────────────────────────────────────────── */
   const [messages, setMessages] = useState([
     { id: 1, type: 'system', text: 'Welcome to iSDS Code Generator' },
-    { id: 2, type: 'ai',     text: "Hi! I'm ready to help you generate code. Describe your project requirements and I'll create a complete implementation." },
+    { id: 2, type: 'ai', text: "Hi! I'm ready to help you generate code. Describe your project requirements and I'll create a complete implementation." },
   ]);
-  const [input,          setInput]          = useState('');
-  const [status,         setStatus]         = useState('idle'); // idle | working | completed | error | ask_debugging | debugging
-  const [progress,       setProgress]       = useState(0);
-  const [displayProgress,setDisplayProgress]= useState(0);
-  const [logs,           setLogs]           = useState([]);
-  const [parsedSummary,  setParsedSummary]  = useState(null);
-  const [files,          setFiles]          = useState([]);
-  const [currentStage,   setCurrentStage]   = useState(null);
+  const [input, setInput] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | working | completed | error | ask_debugging | debugging
+  const [progress, setProgress] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [logs, setLogs] = useState([]);
+  const [parsedSummary, setParsedSummary] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [currentStage, setCurrentStage] = useState(null);
 
   // UI collapse state
   const [consoleCollapsed, setConsoleCollapsed] = useState(false);
-  const [filesCollapsed,   setFilesCollapsed]   = useState(false);
+  const [filesCollapsed, setFilesCollapsed] = useState(false);
 
   // Debugging state
-  const [askDebugging,   setAskDebugging]   = useState(false);
-  const [isDebugging,    setIsDebugging]    = useState(false);
+  const [askDebugging, setAskDebugging] = useState(false);
+  const [isDebugging, setIsDebugging] = useState(false);
   const [debugIteration, setDebugIteration] = useState(0);
-  const [bugsFound,      setBugsFound]      = useState(0);
-  const [bugsFixed,      setBugsFixed]      = useState(0);
-  const [isDebugMode,    setIsDebugMode]    = useState(false);
-  const [debugErrorCount,setDebugErrorCount]= useState(0);
-  const [activeStages,   setActiveStages]   = useState(CODEGEN_STAGES);
+  const [bugsFound, setBugsFound] = useState(0);
+  const [bugsFixed, setBugsFixed] = useState(0);
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [debugErrorCount, setDebugErrorCount] = useState(0);
+  const [activeStages, setActiveStages] = useState(CODEGEN_STAGES);
 
   // Backend job ref
   const [jobIdFromBackend, setJobIdFromBackend] = useState(null);
 
   // Refs
   const messagesEndRef = useRef(null);
-  const lastStageRef   = useRef(null);
+  const lastStageRef = useRef(null);
 
   // Resizable panel
   const { leftPanelWidth, handleMouseDown, containerRef } = useResizablePanel(55);
@@ -88,14 +88,14 @@ const Codegen = () => {
     const lower = text.toLowerCase();
     const isImportant =
       type === 'error' || type === 'warning' || type === 'success' ||
-      lower.includes('started')   || lower.includes('completed') ||
-      lower.includes('ready')     || lower.includes('generated')  ||
-      lower.includes('created')   || lower.includes('failed')     ||
-      lower.includes('error')     || lower.includes('warning')    ||
+      lower.includes('started') || lower.includes('completed') ||
+      lower.includes('ready') || lower.includes('generated') ||
+      lower.includes('created') || lower.includes('failed') ||
+      lower.includes('error') || lower.includes('warning') ||
       lower.includes('summary of codebase') ||
-      lower.includes('project summary')     ||
-      lower.includes('accomplishments')     ||
-      lower.includes('execution highlights')||
+      lower.includes('project summary') ||
+      lower.includes('accomplishments') ||
+      lower.includes('execution highlights') ||
       lower.includes('codebase generation') ||
       lower.includes('node:') ||
       summary;
@@ -118,28 +118,28 @@ const Codegen = () => {
   // Map progress value → workflow stage, emit chat message on stage change
   const updateStage = useCallback((progressVal) => {
     let newStage;
-    if      (progressVal < 12)  newStage = 'analysis';
-    else if (progressVal < 25)  newStage = 'architecture';
-    else if (progressVal < 50)  newStage = 'generation';
-    else if (progressVal < 70)  newStage = 'files';
-    else if (progressVal < 85)  newStage = 'dependencies';
-    else if (progressVal < 95)  newStage = 'debugging';
+    if (progressVal < 12) newStage = 'analysis';
+    else if (progressVal < 25) newStage = 'architecture';
+    else if (progressVal < 50) newStage = 'generation';
+    else if (progressVal < 70) newStage = 'files';
+    else if (progressVal < 85) newStage = 'dependencies';
+    else if (progressVal < 95) newStage = 'debugging';
     else if (progressVal < 100) newStage = 'packaging';
-    else                        newStage = 'completed';
+    else newStage = 'completed';
 
     setCurrentStage(newStage);
 
     if (newStage !== lastStageRef.current) {
       lastStageRef.current = newStage;
       const stageMessages = {
-        analysis:     'Analyzing your requirements...',
+        analysis: 'Analyzing your requirements...',
         architecture: 'Planning project structure...',
-        generation:   'Generating code...',
-        files:        'Creating files...',
+        generation: 'Generating code...',
+        files: 'Creating files...',
         dependencies: 'Setting up dependencies...',
-        debugging:    'Running QA checks...',
-        packaging:    'Packaging project...',
-        completed:    'All done!',
+        debugging: 'Running QA checks...',
+        packaging: 'Packaging project...',
+        completed: 'All done!',
       };
       if (newStage !== 'completed') {
         addChatMessage(stageMessages[newStage], 'ai');
@@ -197,10 +197,10 @@ const Codegen = () => {
     setCurrentStage(newStage);
 
     const stageProgress = {
-      debugging:   15,
+      debugging: 15,
       fixing_bugs: 50,
-      packaging:   80,
-      completed:   100,
+      packaging: 80,
+      completed: 100,
     };
     setProgress(stageProgress[newStage] || progressVal);
   }, []);
@@ -209,7 +209,7 @@ const Codegen = () => {
   const handleReset = () => {
     setMessages([
       { id: 1, type: 'system', text: 'Ready for new project' },
-      { id: 2, type: 'ai',     text: 'What would you like to build next?' },
+      { id: 2, type: 'ai', text: 'What would you like to build next?' },
     ]);
     setInput('');
     setStatus('idle');
@@ -256,17 +256,17 @@ const Codegen = () => {
 
     try {
       const res = await fetch(`${API_BASE_URL}/run`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ requirements: userText }),
+        body: JSON.stringify({ requirements: userText }),
       });
 
       if (!res.ok || !res.body) throw new Error(`Backend error: HTTP ${res.status}`);
 
-      const reader  = res.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8', { fatal: false });
       let buffer = '';
-      let currentJobId       = null;
+      let currentJobId = null;
       let currentDownloadUrl = null;
 
       setMessages(prev => prev.filter(m => m.id !== thinkingId));
@@ -307,7 +307,7 @@ const Codegen = () => {
 
           // Store job ID once
           if (job_id && !currentJobId) {
-            currentJobId       = job_id;
+            currentJobId = job_id;
             currentDownloadUrl = `${API_BASE_URL}/download/${job_id}`;
             setJobIdFromBackend(job_id);
           }
@@ -356,12 +356,12 @@ const Codegen = () => {
               setParsedSummary({
                 title: 'Code Generation Complete',
                 sections: [{
-                  title:   'Results',
+                  title: 'Results',
                   bullets: [`Generated ${fileCount} files`],
-                  stats:   { 'Files Generated': fileCount.toString() },
+                  stats: { 'Files Generated': fileCount.toString() },
                 }],
                 stats: { 'Files Generated': fileCount.toString() },
-                raw:   clean,
+                raw: clean,
               });
             }
 
@@ -419,17 +419,17 @@ const Codegen = () => {
 
     try {
       const res = await fetch(`${API_BASE_URL}/run-debug`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          job_id:       jobIdFromBackend,
+          job_id: jobIdFromBackend,
           requirements: messages.find(m => m.type === 'user')?.text || '',
         }),
       });
 
       if (!res.ok || !res.body) throw new Error(`Debugging error: HTTP ${res.status}`);
 
-      const reader  = res.body.getReader();
+      const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8', { fatal: false });
       let buffer = '';
 
@@ -466,13 +466,13 @@ const Codegen = () => {
           } = payload;
 
           if (bugs_detected !== undefined) setBugsFound(bugs_detected);
-          if (bugs_fixed     !== undefined) setBugsFixed(bugs_fixed);
-          if (error_count    !== undefined) setDebugErrorCount(error_count);
+          if (bugs_fixed !== undefined) setBugsFixed(bugs_fixed);
+          if (error_count !== undefined) setDebugErrorCount(error_count);
 
           // Route to debug stage
           const isDebugEvent = event && (
             event.startsWith('debug_') ||
-            ['detect_bugs','analyze_errors','apply_fixes','rebuild_docker','validate_qa','repackage'].includes(event)
+            ['detect_bugs', 'analyze_errors', 'apply_fixes', 'rebuild_docker', 'validate_qa', 'repackage'].includes(event)
           );
           if (isDebugEvent) {
             updateDebugStage(event, comprehensive_status, debugProgress ? Number(debugProgress) : 0);
@@ -485,7 +485,7 @@ const Codegen = () => {
           }
 
           if (comprehensive_status) {
-            const clean   = stripAnsi(comprehensive_status);
+            const clean = stripAnsi(comprehensive_status);
             const logType = categorizeLog(clean);
             addLog(clean, logType);
             addChatMessage(clean, 'ai');
@@ -545,16 +545,15 @@ const Codegen = () => {
             Code Generator
           </h1>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
-          status === 'working' || status === 'debugging'
+        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${status === 'working' || status === 'debugging'
             ? 'bg-amber-50 text-amber-600 border-amber-200 animate-pulse'
             : status === 'completed'
               ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
               : 'bg-blue-50 text-blue-600 border-blue-200'
-        }`}>
-          {status === 'working'   ? 'Generating...'  :
-           status === 'debugging' ? 'Debugging...'   :
-           status === 'completed' ? 'Complete'       : 'Ready'}
+          }`}>
+          {status === 'working' ? 'Generating...' :
+            status === 'debugging' ? 'Debugging...' :
+              status === 'completed' ? 'Complete' : 'Ready'}
         </span>
       </header>
 
@@ -623,9 +622,10 @@ const Codegen = () => {
         </div>
 
         {/* RIGHT — Progress + logs + files */}
-        <div className="flex-1 min-w-[300px] flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+        <div className="flex-1 min-w-[300px] flex flex-col overflow-hidden p-4 gap-4">
 
+          {/* WorkflowProgress — fixed height, always visible */}
+          <div className="shrink-0">
             <WorkflowProgress
               currentStage={currentStage}
               progress={displayProgress}
@@ -635,29 +635,36 @@ const Codegen = () => {
               bugsFound={bugsFound}
               bugsFixed={bugsFixed}
             />
+          </div>
 
-            <ConsoleLog
-              logs={logs}
-              summary={parsedSummary}
-              isCollapsed={consoleCollapsed}
-              onToggleCollapse={() => setConsoleCollapsed(c => !c)}
-            />
+          {/* ConsoleLog — flex-1 min-h-0 so it fills all remaining space */}
+          <ConsoleLog
+            logs={logs}
+            summary={parsedSummary}
+            isCollapsed={consoleCollapsed}
+            onToggleCollapse={() => setConsoleCollapsed(c => !c)}
+            fillHeight
+          />
 
+          {/* FileExplorer — shrink-0, fixed height */}
+          <div className="shrink-0">
             <FileExplorer
               files={files}
               isCollapsed={filesCollapsed}
               onToggleCollapse={() => setFilesCollapsed(c => !c)}
             />
+          </div>
 
-            {status === 'completed' && (
+          {status === 'completed' && (
+            <div className="shrink-0">
               <SuccessOutput
                 jobId={jobIdFromBackend}
                 fileCount={files.length}
                 downloadUrl={jobIdFromBackend ? `${API_BASE_URL}/download/${jobIdFromBackend}` : null}
                 onReset={handleReset}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -669,7 +676,7 @@ const Codegen = () => {
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
       `}</style>
-    </div>
+    </div >
   );
 };
 

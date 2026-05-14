@@ -15,11 +15,11 @@ import SummaryCard from './SummaryCard';
 
 const getLogIcon = (type) => {
   switch (type) {
-    case 'error':   return <AlertCircle size={14} className="text-red-500 shrink-0" />;
+    case 'error': return <AlertCircle size={14} className="text-red-500 shrink-0" />;
     case 'warning': return <AlertCircle size={14} className="text-amber-500 shrink-0" />;
     case 'success': return <CheckCircle size={14} className="text-green-600 shrink-0" />;
-    case 'debug':   return <Bug size={14} className="text-purple-500 shrink-0" />;
-    default:        return <Terminal size={14} className="text-slate-400 shrink-0" />;
+    case 'debug': return <Bug size={14} className="text-purple-500 shrink-0" />;
+    default: return <Terminal size={14} className="text-slate-400 shrink-0" />;
   }
 };
 
@@ -43,7 +43,7 @@ const formatLogText = (text) => {
   return formatted;
 };
 
-const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse }) => {
+const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse, fillHeight = false }) => {
   const logEndRef = useRef(null);
 
   useEffect(() => {
@@ -53,7 +53,9 @@ const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse }
   }, [logs, isCollapsed]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
+    <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700
+      rounded-xl shadow-sm overflow-hidden flex flex-col
+      ${fillHeight ? 'flex-1 min-h-0' : ''}`}>
 
       {/* Collapsible header */}
       <button
@@ -72,7 +74,7 @@ const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse }
       </button>
 
       {!isCollapsed && (
-        <div className="border-t border-slate-200 dark:border-slate-700">
+        <div className={`border-t border-slate-200 dark:border-slate-700 flex flex-col ${fillHeight ? 'flex-1 min-h-0' : ''}`}>
           {/* Summary card at top */}
           {summary && (
             <div className="p-3 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-br from-emerald-50 to-cyan-50 dark:from-emerald-900/10 dark:to-cyan-900/10">
@@ -80,7 +82,7 @@ const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse }
             </div>
           )}
 
-          <div className="h-48 overflow-y-auto p-3 space-y-1.5 font-mono text-xs custom-scrollbar">
+          <div className={`${fillHeight ? 'flex-1' : 'h-48'} overflow-y-auto p-3 space-y-1.5 font-mono text-xs custom-scrollbar`}>
             {logs.length === 0 ? (
               <div className="text-slate-400 dark:text-slate-500 italic">No logs yet...</div>
             ) : (
@@ -93,13 +95,12 @@ const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse }
                     {new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false })}
                   </span>
                   {getLogIcon(log.type)}
-                  <span className={`flex-1 break-all ${
-                    log.type === 'error'   ? 'text-red-600 dark:text-red-400'    :
-                    log.type === 'warning' ? 'text-amber-600 dark:text-amber-400' :
-                    log.type === 'success' ? 'text-green-700 dark:text-green-400' :
-                    log.type === 'debug'   ? 'text-purple-600 dark:text-purple-400' :
-                    'text-slate-600 dark:text-slate-300'
-                  }`}>
+                  <span className={`flex-1 break-all ${log.type === 'error' ? 'text-red-600 dark:text-red-400' :
+                      log.type === 'warning' ? 'text-amber-600 dark:text-amber-400' :
+                        log.type === 'success' ? 'text-green-700 dark:text-green-400' :
+                          log.type === 'debug' ? 'text-purple-600 dark:text-purple-400' :
+                            'text-slate-600 dark:text-slate-300'
+                    }`}>
                     {formatLogText(log.text)}
                   </span>
                 </div>
