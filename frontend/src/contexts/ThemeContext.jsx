@@ -1,17 +1,25 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 
+/* ============================================================
+   ThemeContext
+   Used in main.jsx as <ThemeProvider> — already there, good.
+
+   Flash/jerk fix:
+   1. index.html inline script → applies .dark before React
+   2. index.css blocks transitions on html:not(.theme-ready)
+   3. This file adds .theme-ready 50ms after mount → unlocks
+      smooth 200ms colour transitions from that point on
+   ============================================================ */
+
 const ThemeContext = createContext({
-  darkMode: false,
+  darkMode:    false,
   toggleTheme: () => {},
-  isDark: false
+  isDark:      false,
 });
 
-export const useTheme = () => {
-  return useContext(ThemeContext);
-};
+export const useTheme = () => useContext(ThemeContext);
 
 export const ThemeProvider = ({ children }) => {
-  // Initialize darkMode - check localStorage or system preference
   const getInitialTheme = () => {
     if (typeof window === 'undefined') return false;
     const stored = localStorage.getItem('theme');
@@ -20,13 +28,8 @@ export const ThemeProvider = ({ children }) => {
   };
 
   const [darkMode, setDarkMode] = useState(getInitialTheme);
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Apply dark class to HTML element whenever darkMode changes
+  // Sync .dark class + localStorage whenever darkMode changes
   useEffect(() => {
     const html = document.documentElement;
     if (darkMode) {
@@ -38,27 +41,15 @@ export const ThemeProvider = ({ children }) => {
     }
   }, [darkMode]);
 
-  // Also apply on mount to handle page refresh
+  // Unlock CSS transitions after first paint
   useEffect(() => {
-    if (mounted) {
-      const stored = localStorage.getItem('theme');
-      const shouldBeDark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
-      const html = document.documentElement;
+    const id = setTimeout(() => {
+      document.documentElement.classList.add('theme-ready');
+    }, 50);
+    return () => clearTimeout(id);
+  }, []);
 
-      if (shouldBeDark) {
-        html.classList.add('dark');
-      } else {
-        html.classList.remove('dark');
-      }
-
-      // Sync state with actual state
-      setDarkMode(shouldBeDark);
-    }
-  }, [mounted]);
-
-  const toggleTheme = () => {
-    setDarkMode(prev => !prev);
-  };
+  const toggleTheme = () => setDarkMode(prev => !prev);
 
   return (
     <ThemeContext.Provider value={{ darkMode, toggleTheme, isDark: darkMode }}>
