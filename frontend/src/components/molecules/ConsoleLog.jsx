@@ -55,7 +55,7 @@ const ConsoleLog = ({ logs = [], summary = null, isCollapsed, onToggleCollapse, 
   return (
     <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700
       rounded-xl shadow-sm overflow-hidden flex flex-col
-      ${fillHeight ? 'flex-1 min-h-0' : ''}`}>
+      ${fillHeight ? 'flex-1 min-h-[200px]' : ''}`}>
 
       {/* Collapsible header */}
       <button

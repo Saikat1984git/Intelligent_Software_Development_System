@@ -533,7 +533,7 @@ const Codegen = () => {
 
   /* ── Render ────────────────────────────────────────────── */
   return (
-    <div className="h-[calc(100vh)] flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
 
       {/* Page header */}
       <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-5 shrink-0">
@@ -622,7 +622,7 @@ const Codegen = () => {
         </div>
 
         {/* RIGHT — Progress + logs + files */}
-        <div className="flex-1 min-w-[300px] flex flex-col overflow-hidden p-4 gap-4">
+        <div className="flex-1 min-w-[300px] flex flex-col overflow-y-auto p-4 gap-4 custom-scrollbar">
 
           {/* WorkflowProgress — fixed height, always visible */}
           <div className="shrink-0">
@@ -637,7 +637,7 @@ const Codegen = () => {
             />
           </div>
 
-          {/* ConsoleLog — flex-1 min-h-0 so it fills all remaining space */}
+          {/* ConsoleLog — grows to fill space, min-h ensures visible on small screens */}
           <ConsoleLog
             logs={logs}
             summary={parsedSummary}
@@ -667,6 +667,7 @@ const Codegen = () => {
           )}
         </div>
       </div>
+
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }

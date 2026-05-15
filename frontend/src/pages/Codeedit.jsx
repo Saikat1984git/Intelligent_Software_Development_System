@@ -25,16 +25,16 @@ import useResizablePanel from '../hooks/useResizablePanel';
 const Codeedit = () => {
 
   /* ── State ─────────────────────────────────────────────── */
-  const [projectPath,      setProjectPath]      = useState('');
-  const [prompt,           setPrompt]           = useState('');
-  const [images,           setImages]           = useState([]);
-  const [logs,             setLogs]             = useState([]);
-  const [isProcessing,     setIsProcessing]     = useState(false);
+  const [projectPath, setProjectPath] = useState('');
+  const [prompt, setPrompt] = useState('');
+  const [images, setImages] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('idle'); // idle | connecting | streaming | done | error
 
   // Workflow state
   const [currentStage, setCurrentStage] = useState(null);
-  const [progress,     setProgress]     = useState(0);
+  const [progress, setProgress] = useState(0);
 
   // Drag state for image drop zone
   const [isDragging, setIsDragging] = useState(false);
@@ -105,16 +105,16 @@ const Codeedit = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/rewrite`, {
         method: 'POST',
-        body:   formData,
+        body: formData,
       });
 
       if (!response.ok) throw new Error(`Server Error: ${response.statusText}`);
 
       setConnectionStatus('streaming');
 
-      const reader  = response.body.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer   = '';
+      let buffer = '';
       let hasError = false;
 
       while (true) {
@@ -152,10 +152,10 @@ const Codeedit = () => {
             updateStageFromLogs(message);
 
             setLogs(prev => [...prev, {
-              id:        Date.now() + Math.random(),
-              content:   message,
+              id: Date.now() + Math.random(),
+              content: message,
               timestamp: new Date().toLocaleTimeString(),
-              isError:   lowerMsg.includes('error') || lowerMsg.includes('failed') || lowerMsg.includes('exception'),
+              isError: lowerMsg.includes('error') || lowerMsg.includes('failed') || lowerMsg.includes('exception'),
             }]);
           }
         }
@@ -164,9 +164,9 @@ const Codeedit = () => {
       setCurrentStage('completed');
       setProgress(100);
       setLogs(prev => [...prev, {
-        id:        Date.now(),
-        content:   `Error: ${error.message}`,
-        isError:   true,
+        id: Date.now(),
+        content: `Error: ${error.message}`,
+        isError: true,
         timestamp: new Date().toLocaleTimeString(),
       }]);
       setConnectionStatus('error');
@@ -176,7 +176,7 @@ const Codeedit = () => {
 
   /* ── Render ────────────────────────────────────────────── */
   return (
-    <div className="flex h-[calc(100vh)] bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-200 overflow-hidden transition-colors duration-300">
+    <div className="flex h-full bg-slate-50 dark:bg-slate-950 font-sans text-slate-800 dark:text-slate-200 overflow-hidden transition-colors duration-300">
       <main className="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
 
         {/* Page header */}
@@ -185,15 +185,14 @@ const Codeedit = () => {
             <FileCode className="text-blue-500" size={20} />
             AI Code modification Studio
           </h1>
-          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${
-            isProcessing
+          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${isProcessing
               ? 'bg-blue-50 text-blue-600 border-blue-100 animate-pulse'
               : connectionStatus === 'error'
                 ? 'bg-red-50 text-red-600 border-red-100'
                 : connectionStatus === 'done'
                   ? 'bg-green-50 text-green-600 border-green-100'
                   : 'bg-blue-50 text-blue-600 border-blue-100'
-          }`}>
+            }`}>
             {isProcessing
               ? 'PROCESSING AGENT ACTIVE'
               : connectionStatus === 'error'
@@ -261,11 +260,10 @@ const Codeedit = () => {
 
                 {/* Drop zone */}
                 <div
-                  className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
-                    isDragging
+                  className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${isDragging
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/10'
                       : 'border-slate-300 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-slate-50 dark:hover:bg-slate-800'
-                  } ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                    } ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
@@ -321,11 +319,10 @@ const Codeedit = () => {
               <button
                 type="submit"
                 disabled={isProcessing}
-                className={`w-full py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 font-semibold text-white shadow-lg shadow-blue-500/30 transition-all ${
-                  isProcessing
+                className={`w-full py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 font-semibold text-white shadow-lg shadow-blue-500/30 transition-all ${isProcessing
                     ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed'
                     : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:translate-y-[-1px] hover:shadow-blue-500/40 active:translate-y-[1px]'
-                }`}
+                  }`}
               >
                 {isProcessing ? (
                   <>
