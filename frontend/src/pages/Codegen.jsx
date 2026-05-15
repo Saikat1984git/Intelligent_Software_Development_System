@@ -533,7 +533,7 @@ const Codegen = () => {
 
   /* ── Render ────────────────────────────────────────────── */
   return (
-    <div className="h-[calc(100vh)] flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
 
       {/* Page header */}
       <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-5 shrink-0">
@@ -668,6 +668,7 @@ const Codegen = () => {
         </div>
       </div>
 
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -676,7 +677,7 @@ const Codegen = () => {
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
       `}</style>
-    </div>
+    </div >
   );
 };
 

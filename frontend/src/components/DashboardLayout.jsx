@@ -5,13 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import TopNavbar from './organisms/TopNavbar';
 import SideNavbar from './organisms/SideNavbar';
 
-/* ============================================================
-   DashboardLayout
-   Shell layout — wraps all protected pages.
-   TopNavbar and SideNavbar are now separate organism files.
-   All logic and behaviour identical to the original.
-   ============================================================ */
-
 const DashboardLayout = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('sidebarOpen');
@@ -43,10 +36,14 @@ const DashboardLayout = ({ children }) => {
   const sidebarMarginClass = isSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-64';
 
   return (
-    <div className={`h-screen flex flex-col font-sans transition-colors duration-300 ${
-      darkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'
-    }`}>
+    /*
+      Root: 100dvh (dynamic viewport — handles mobile browsers correctly)
+      flex flex-col — stacks TopNavbar + content area vertically
+    */
+    <div className={`font-sans transition-colors duration-300 ${darkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'
+      }`} style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }}>
 
+      {/* Fixed top navbar — takes up 4rem (h-16) */}
       <TopNavbar
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
@@ -56,7 +53,15 @@ const DashboardLayout = ({ children }) => {
         onLogout={handleLogout}
       />
 
-      <div className="flex h-full overflow-hidden pt-16 lg:pt-0">
+      {/*
+        Content row: sits directly BELOW the navbar.
+        TopNavbar is fixed so we add a spacer div (h-16) to push
+        this row below it — avoids the pt-16 overflow problem.
+        flex-1 min-h-0 — takes remaining height, allows shrinking.
+      */}
+      <div style={{ height: '4rem', flexShrink: 0 }} /> {/* spacer for fixed navbar */}
+
+      <div className={`flex flex-1 min-h-0 overflow-hidden`}>
         <SideNavbar
           isSidebarOpen={isSidebarOpen}
           setIsSidebarOpen={setIsSidebarOpen}
@@ -66,9 +71,13 @@ const DashboardLayout = ({ children }) => {
           onLogout={handleLogout}
         />
 
-        <main className={`flex-1 overflow-y-auto transition-all duration-300 ${sidebarMarginClass} ${
-          darkMode ? 'bg-slate-900 text-slate-200' : 'bg-slate-50 text-slate-800'
-        }`}>
+        {/*
+          main: flex-1 min-h-0 overflow-hidden
+          Pages use h-full to fill this exactly.
+          overflow-hidden — each page controls its own scroll.
+        */}
+        <main className={`flex-1 min-h-0 overflow-hidden transition-all duration-300 ${sidebarMarginClass} ${darkMode ? 'bg-slate-900 text-slate-200' : 'bg-slate-50 text-slate-800'
+          }`}>
           {children}
         </main>
       </div>
