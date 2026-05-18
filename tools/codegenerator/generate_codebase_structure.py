@@ -13,8 +13,12 @@ from pprint import pprint
 
 # Assuming these are defined in your project
 from models.gemini_models import GEMINI_31_PRO
+from models.openai_models import GPT_53_CODEX, GPT_52_CHAT, GPT_5_MINI_TEST
 from utils import print_tree
 
+
+
+GENERATION_LLM = GEMINI_31_PRO
 console = Console()
 
 # -------------------------------------------------------------------
@@ -91,7 +95,7 @@ def generate_codebase_structure_node(state: CodebaseState) -> Dict[str, Any]:
     execution_log.append("Resolved skills context for LLM input.")
 
     # 3. Setup LLM with Structured Output
-    base_llm = GEMINI_31_PRO
+    base_llm = GENERATION_LLM
     llm = base_llm.with_structured_output(CodebaseMap)
 
     system_prompt = f"""You are an expert software architect. Analyze the provided requirements and generate a production-ready codebase structure.

@@ -19,6 +19,7 @@ from agents.code_editing_agent import code_editing_agent
 from agents.codegen_agent import run_codegeneration_agent
 from agents.debug_agent import run_debugging_agent
 from agents.qa_testing_agent import qa_testing_with_requirements
+from agents.subagents.code_analyzer_subagent import analyze_codebase_agent
 
 from models.openai_models import GPT_51_CODEX_MINI, GPT_4O_MINI, GPT_52_CHAT , GPT_5_MINI_TEST
 from models.gemini_models import GEMINI_31_PRO, GEMINI_25_PRO, GEMINI_3_FLASH, GEMINI_25_FLASH, GEMINI_25_FLASH_LITE
@@ -38,6 +39,26 @@ def get_timestamped_dir():
     path = os.path.join(BASE_DIR, f"latest_{timestamp}")
     os.makedirs(path, exist_ok=True)
     return path
+
+def ensure_project_metadata(project_folder_path: str):
+    """
+    Checks if project_metadata.json exists in the target directory. 
+    If not, it triggers the code analyzer subagent to generate it.
+    """
+    metadata_file = os.path.join(project_folder_path, "project_metadata.json")
+    if not os.path.exists(metadata_file):
+        console.print(f"[bold yellow]⚠️ project_metadata.json not found in {project_folder_path}[/bold yellow]")
+        console.print("[dim]🔍 Running Code Analyzer Agent to map the codebase...[/dim]")
+        try:
+            # Call the synchronous wrapper of the analyzer agent
+            analyzer_result = analyze_codebase_agent(project_folder_path)
+            console.print("[green]✅ Codebase mapping complete. Metadata generated.[/green]")
+            console.print(f"[dim]{analyzer_result}[/dim]")
+        except Exception as e:
+            console.print(f"[bold red]❌ Failed to generate project_metadata.json: {str(e)}[/bold red]")
+            raise e
+    else:
+        console.print("[dim]✅ project_metadata.json found. Proceeding with existing architecture map...[/dim]")
 
 @tool
 async def generate_code_tool(user_requirements: str) -> str:
@@ -87,6 +108,10 @@ def edit_code_tool(edit_prompt: str, project_folder_path: str) -> str:
     Use this when the user wants to fix an issue or modify specific code files within an existing project folder.
     """
     console.print("[bold magenta]📝 Starting Code Editing Agent...[/bold magenta]")
+
+    # Check and generate project metadata if it's missing before attempting to edit
+    ensure_project_metadata(project_folder_path)
+    
     result = code_editing_agent(edit_prompt, project_folder_path)
     return f"Code editing completed. Result: {result}"
 
